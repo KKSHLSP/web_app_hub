@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>帳戶設定</title>
+  <style>
+    body { margin:0; font-family:Inter,system-ui,sans-serif; background:#0f1221; color:#eef2ff; }
+    .wrap { max-width:760px; margin:0 auto; padding:24px; }
+    .card { background:#181c31; border:1px solid #2d355d; border-radius:18px; padding:18px; }
+    input,select,button { background:#202744; color:#eef2ff; border:1px solid #36406c; border-radius:12px; padding:10px 12px; }
+    button { cursor:pointer; }
+    .primary { background:#7c9cff; border-color:transparent; color:#fff; }
+    .subtle { color:#a6b0d8; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <p><a href="/" style="color:#9cb8ff;text-decoration:none">← 返回首頁</a></p>
+    <div class="card">
+      <h1>帳戶設定</h1>
+      <p class="subtle">可修改生日與密碼。密碼留空代表取消密碼。</p>
+      <div style="display:grid; gap:10px; max-width:420px;">
+        <select id="userSelect"></select>
+        <input id="birthday" type="date" />
+        <input id="password" type="password" placeholder="新密碼，可留空" />
+        <div><button class="primary" id="saveBtn">保存設定</button></div>
+      </div>
+      <p class="subtle" id="line"></p>
+    </div>
+  </div>
+  <script>
+    let users = [];
+    async function loadUsers(){
+      const data = await fetch('/api/users').then(r => r.json());
+      users = data.users || [];
+      const sel = document.getElementById('userSelect');
+      sel.innerHTML = '';
+      for (const u of users) {
+        const opt = document.createElement('option');
+        opt.value = u.id;
+        opt.textContent = u.name + (u.has_password ? ' 🔒' : '');
+        sel.appendChild(opt);
+      }
+      fill();
+    }
+    function fill(){
+      const id = Number(document.getElementById('userSelect').value || 0);
+      const user = users.find(u => u.id === id);
+      document.getElementById('birthday').value = user?.birthday || '';
+      document.getElementById('line').textContent = user ? `正在編輯：${user.name}` : '';
+    }
+    async function save(){
+      const user_id = Number(document.getElementById('userSelect').value || 0);
+      const birthday = document.getElementById('birthday').value;
+      const password = document.getElementById('password').value;
+      const data = await fetch('/api/users/update', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ user_id, birthday, password }) }).then(r => r.json());
+      if (!data.ok) return alert(data.error || '保存失敗');
+      alert('已保存');
+      document.getElementById('password').value = '';
+      loadUsers();
+    }
+    document.getElementById('userSelect').onchange = fill;
+    document.getElementById('saveBtn').onclick = save;
+    loadUsers();
+  </script>
+</body>
+</html>

@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>小遊戲與工具合集</title>
+  <style>
+    body { margin:0; font-family:Inter,system-ui,sans-serif; background:#0f1221; color:#eef2ff; }
+    .wrap { max-width:1100px; margin:0 auto; padding:24px; }
+    .grid { display:grid; grid-template-columns:1.1fr .9fr; gap:16px; }
+    .card { background:#181c31; border:1px solid #2d355d; border-radius:18px; padding:18px; }
+    a { color:#9cb8ff; text-decoration:none; }
+    .subtle { color:#a6b0d8; }
+    .pill { display:inline-block; padding:4px 8px; background:#24305c; border-radius:999px; font-size:12px; }
+    input,select,button { background:#202744; color:#eef2ff; border:1px solid #36406c; border-radius:12px; padding:10px 12px; }
+    button { cursor:pointer; }
+    .primary { background:#7c9cff; border-color:transparent; color:#fff; }
+    .list { display:grid; gap:10px; }
+    .app { padding:14px; border:1px solid #2d355d; border-radius:14px; background:#12172a; }
+    @media (max-width: 900px){ .grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>小遊戲與工具合集</h1>
+    <p class="subtle">先選擇使用者，再進入工具。使用者不多時，這樣的輕量多帳號結構夠用。</p>
+    <div class="grid">
+      <section class="card">
+        <h2>使用者入口</h2>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+          <select id="userSelect"><option value="">請選擇使用者</option></select>
+          <button class="primary" id="enterBtn">進入</button>
+          <button id="refreshUsersBtn">刷新</button>
+          <button id="newUserBtn">新增用戶</button>
+          <a href="/settings">設定</a>
+        </div>
+        <p class="subtle" id="currentUserLine" style="margin-top:12px">目前未選擇使用者。</p>
+
+        <div id="passwordBox" style="display:none; margin-top:12px;">
+          <label>此用戶需要密碼：<input id="passwordInput" type="password" placeholder="輸入密碼" /></label>
+        </div>
+
+        <div id="newUserBox" style="display:none; margin-top:16px; border-top:1px solid #2d355d; padding-top:16px;">
+          <h3>新增用戶</h3>
+          <div style="display:grid; gap:10px; max-width:420px;">
+            <input id="newUserName" placeholder="用戶名稱" />
+            <input id="newUserBirthday" type="date" />
+            <input id="newUserPassword" type="password" placeholder="可留空＝不設密碼" />
+            <div><button class="primary" id="createUserBtn">建立</button></div>
+          </div>
+        </div>
+      </section>
+      <section class="card">
+        <h2>可用項目</h2>
+        <div class="list" id="apps"></div>
+      </section>
+    </div>
+  </div>
+  <script>
+    let users = [];
+    let apps = [];
+    let selectedUser = null;
+
+    function saveSelectedUser(user){
+      localStorage.setItem('hub_selected_user', JSON.stringify(user));
+      selectedUser = user;
+      document.getElementById('currentUserLine').textContent = user ? `目前使用者：${user.name}` : '目前未選擇使用者。';
+    }
+    function loadSelectedUser(){
+      try { return JSON.parse(localStorage.getItem('hub_selected_user') || 'null'); } catch { return null; }
+    }
+
+    async function loadUsers(){
+      const data = await fetch('/api/users').then(r => r.json());
+      users = data.users || [];
+      const sel = document.getElementById('userSelect');
+      sel.innerHTML = '<option value="">請選擇使用者</option>';
+      for (const u of users) {
+        const opt = document.createElement('option');
+        opt.value = u.id;
+        opt.textContent = u.name + (u.has_password ? ' 🔒' : '');
+        sel.appendChild(opt);
+      }
+      const saved = loadSelectedUser();
+      if (saved) {
+        const found = users.find(u => u.id === saved.id);
+        if (found) {
+          sel.value = String(found.id);
+          saveSelectedUser(found);
+          document.getElementById('passwordBox').style.display = found.has_password ? 'block' : 'none';
+        }
+      }
+    }
+
+    async function loadApps(){
+      const data = await fetch('/api/apps').then(r => r.json());
+      apps = data.apps || [];
+      const root = document.getElementById('apps');
+      root.innerHTML = '';
+      for (const app of apps) {
+        const div = document.createElement('div');
+        div.className = 'app';
+        div.innerHTML = `<div class="pill">${app.kind}</div><h3>${app.name}</h3><p class="subtle">slug: ${app.slug}</p><button data-route="${app.route}">打開</button>`;
+        div.querySelector('button').onclick = () => openApp(app.route);
+        root.appendChild(div);
+      }
+    }
+
+    function onUserChange(){
+      const id = Number(document.getElementById('userSelect').value || 0);
+      const found = users.find(u => u.id === id) || null;
+      saveSelectedUser(found);
+      document.getElementById('passwordBox').style.display = found && found.has_password ? 'block' : 'none';
+    }
+
+    async function enter(){
+      const user = selectedUser;
+      if (!user) return alert('先選一個使用者');
+      if (user.has_password) {
+        const password = document.getElementById('passwordInput').value;
+        const res = await fetch('/api/users/verify', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ user_id: user.id, password }) });
+        const data = await res.json();
+        if (!data.ok) return alert(data.error || '密碼錯了');
+      }
+      alert(`已進入使用者：${user.name}`);
+    }
+
+    function openApp(route){
+      const user = selectedUser;
+      if (!user) return alert('先選一個使用者');
+      location.href = route;
+    }
+
+    async function createUser(){
+      const name = document.getElementById('newUserName').value.trim();
+      const birthday = document.getElementById('newUserBirthday').value;
+      const password = document.getElementById('newUserPassword').value;
+      if (!name) return alert('請填用戶名稱');
+      const data = await fetch('/api/users', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, birthday, password }) }).then(r => r.json());
+      if (!data.ok) return alert(data.error || '建立失敗');
+      document.getElementById('newUserName').value = '';
+      document.getElementById('newUserBirthday').value = '';
+      document.getElementById('newUserPassword').value = '';
+      await loadUsers();
+      document.getElementById('newUserBox').style.display = 'none';
+      document.getElementById('userSelect').value = String(data.id);
+      onUserChange();
+    }
+
+    document.getElementById('userSelect').onchange = onUserChange;
+    document.getElementById('enterBtn').onclick = enter;
+    document.getElementById('refreshUsersBtn').onclick = loadUsers;
+    document.getElementById('newUserBtn').onclick = () => {
+      const box = document.getElementById('newUserBox');
+      box.style.display = box.style.display === 'none' ? 'block' : 'none';
+    };
+    document.getElementById('createUserBtn').onclick = createUser;
+
+    loadUsers();
+    loadApps();
+    setInterval(loadUsers, 10000);
+  </script>
+</body>
+</html>

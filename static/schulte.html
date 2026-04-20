@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>舒爾特方格</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root { --bg:#0f1221; --card:#181c31; --card-2:#202744; --text:#eef2ff; --muted:#a6b0d8; --accent:#7c9cff; --accent-2:#4ee0c1; --danger:#ff7373; --line:#2d355d; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Inter,system-ui,sans-serif; background:linear-gradient(180deg,#0b0e1a 0%,#13182b 100%); color:var(--text); }
+    .wrap { max-width:1220px; margin:0 auto; padding:24px; }
+    .grid { display:grid; gap:16px; grid-template-columns:1.2fr .95fr; }
+    .card { background:rgba(24,28,49,.92); border:1px solid var(--line); border-radius:18px; padding:18px; }
+    .controls,.stats,.row,.filters { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    input,select,button,textarea { background:var(--card-2); color:var(--text); border:1px solid #36406c; border-radius:12px; padding:10px 12px; font-size:14px; }
+    textarea { width:100%; min-height:72px; resize:vertical; }
+    button { cursor:pointer; }
+    .primary { background:var(--accent); color:white; border-color:transparent; }
+    .good { background:var(--accent-2); color:#09231d; border-color:transparent; }
+    .danger { background:var(--danger); color:white; border-color:transparent; }
+    .subtle { color:var(--muted); font-size:13px; }
+    .hero { display:flex; justify-content:space-between; gap:14px; margin-bottom:16px; }
+    .badge,.pill { display:inline-block; padding:6px 10px; border-radius:999px; border:1px solid #3d4877; color:var(--muted); font-size:12px; }
+    .board-wrap { margin-top:14px; display:flex; justify-content:center; }
+    .board { display:grid; gap:10px; width:min(100%,620px); aspect-ratio:1/1; }
+    .cell { background:#11172a; border:1px solid #35406a; border-radius:16px; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:clamp(22px,3vw,34px); user-select:none; }
+    .cell.done { opacity:.35; text-decoration:line-through; }
+    .cell.hit { outline:2px solid var(--accent-2); }
+    .cell.miss { outline:2px solid var(--danger); }
+    .stats > .metric { background:#13182c; border:1px solid var(--line); border-radius:14px; padding:12px 14px; min-width:120px; }
+    .metric .k { color:var(--muted); font-size:12px; }
+    .metric .v { font-size:24px; font-weight:800; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th,td { border-bottom:1px solid var(--line); text-align:left; padding:10px 8px; vertical-align:top; }
+    th { color:var(--muted); font-weight:600; }
+    canvas { width:100% !important; max-height:260px; }
+    @media (max-width:920px){ .grid{grid-template-columns:1fr;} .board{width:min(100%,92vw);} }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <div>
+        <p><a href="/" style="color:#9cb8ff;text-decoration:none">← 返回合集首頁</a></p>
+        <h1>標準舒爾特方格</h1>
+        <p class="subtle">成績現在按使用者分開存。未選到使用者時不允許保存。</p>
+      </div>
+      <div>
+        <div class="badge" id="userBadge">未選使用者</div>
+      </div>
+    </div>
+    <div class="grid">
+      <section class="card">
+        <h2>遊戲區</h2>
+        <div class="controls">
+          <label>玩法
+            <select id="mode"><option value="asc" selected>順序 1 → N</option><option value="desc">倒序 N → 1</option></select>
+          </label>
+          <label>難度 / 尺寸
+            <select id="preset"><option value="5" selected>標準 5×5（1–25）</option><option value="6">進階 6×6（1–36）</option><option value="7">困難 7×7（1–49）</option><option value="8">地獄 8×8（1–64）</option></select>
+          </label>
+          <button class="primary" id="startBtn">開始挑戰</button>
+          <button id="resetRoundBtn">重開本局</button>
+        </div>
+        <div class="stats" style="margin-top:14px">
+          <div class="metric"><div class="k">時間</div><div class="v" id="timer">0.0s</div></div>
+          <div class="metric"><div class="k">正確</div><div class="v" id="correct">0</div></div>
+          <div class="metric"><div class="k">失誤</div><div class="v" id="mistakes">0</div></div>
+          <div class="metric"><div class="k">當前目標</div><div class="v" id="target">1</div></div>
+          <div class="metric"><div class="k">平均點擊間隔</div><div class="v" id="avgInterval">—</div></div>
+        </div>
+        <p style="margin-top:14px">目前規則：<span class="pill" id="modeHint">順序 1 → 25</span></p>
+        <div class="board-wrap"><div class="board" id="board"></div></div>
+        <div style="margin-top:16px">
+          <h3>本局附加欄位</h3>
+          <div class="row"><label>狀態 <input id="condition" /></label></div>
+          <div style="margin-top:10px"><label>備註</label><textarea id="notes"></textarea></div>
+          <div class="row" style="margin-top:10px"><button class="good" id="saveBtn" disabled>保存本局成績</button><span class="subtle" id="roundSummary">尚未完成本局。</span></div>
+        </div>
+      </section>
+      <section class="card">
+        <h2>成績總覽</h2>
+        <div class="stats">
+          <div class="metric"><div class="k">總場次</div><div class="v" id="totalRuns">0</div></div>
+          <div class="metric"><div class="k">最佳時間</div><div class="v" id="bestTime">—</div></div>
+          <div class="metric"><div class="k">平均失誤</div><div class="v" id="avgMistakes">—</div></div>
+          <div class="metric"><div class="k">最近 5 場均分</div><div class="v" id="avgScore5">—</div></div>
+        </div>
+        <div style="margin-top:16px"><h3>趨勢</h3><canvas id="trendChart"></canvas></div>
+        <div style="margin-top:16px">
+          <h3>歷史紀錄</h3>
+          <div class="filters"><select id="filterPreset"><option value="all">全部尺寸</option><option value="5">5×5</option><option value="6">6×6</option><option value="7">7×7</option><option value="8">8×8</option></select><select id="sortBy"><option value="newest">最新優先</option><option value="bestTime">最佳時間</option><option value="bestScore">最佳分數</option></select><button id="exportBtn">匯出 JSON</button><button class="danger" id="clearBtn">清空本用戶紀錄</button></div>
+          <div style="margin-top:12px; max-height:360px; overflow:auto;"><table><thead><tr><th>#</th><th>時間</th><th>尺寸</th><th>分數</th><th>失誤</th><th>平均間隔</th><th>備註</th></tr></thead><tbody id="historyBody"></tbody></table></div>
+        </div>
+      </section>
+    </div>
+  </div>
+  <script>
+    const boardEl = document.getElementById('board');
+    const timerEl = document.getElementById('timer');
+    const correctEl = document.getElementById('correct');
+    const mistakesEl = document.getElementById('mistakes');
+    const targetEl = document.getElementById('target');
+    const avgIntervalEl = document.getElementById('avgInterval');
+    const modeHintEl = document.getElementById('modeHint');
+    const roundSummaryEl = document.getElementById('roundSummary');
+    const saveBtn = document.getElementById('saveBtn');
+    const userBadge = document.getElementById('userBadge');
+    let chart; let runs = []; let currentUser = null;
+    let state = { running:false, finished:false, startAt:null, elapsed:0, timerId:null, gridSize:5, totalNumbers:25, numbers:[], order:[], nextIndex:0, correct:0, mistakes:0, clicks:0, mode:'asc', score:0, clickTimes:[] };
+    const shuffle = arr => { const a=[...arr]; for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]];} return a; };
+    const buildNumbers = n => Array.from({length:n*n}, (_,i)=>i+1);
+    function loadCurrentUser(){ try { currentUser = JSON.parse(localStorage.getItem('hub_selected_user') || 'null'); } catch { currentUser = null; } userBadge.textContent = currentUser ? `使用者：${currentUser.name}` : '未選使用者'; }
+    function startGame(){ clearInterval(state.timerId); state.mode=document.getElementById('mode').value; state.gridSize=Number(document.getElementById('preset').value); state.totalNumbers=state.gridSize*state.gridSize; state.numbers=shuffle(buildNumbers(state.gridSize)); state.order=[...state.numbers].sort((a,b)=>state.mode==='asc'?a-b:b-a); state.nextIndex=0; state.correct=0; state.mistakes=0; state.clicks=0; state.elapsed=0; state.score=0; state.clickTimes=[]; state.running=true; state.finished=false; state.startAt=performance.now(); modeHintEl.textContent=state.mode==='asc'?`順序 1 → ${state.totalNumbers}`:`倒序 ${state.totalNumbers} → 1`; saveBtn.disabled=true; roundSummaryEl.textContent='挑戰進行中…'; boardEl.style.gridTemplateColumns=`repeat(${state.gridSize}, minmax(0, 1fr))`; renderBoard(); tick(); state.timerId=setInterval(tick,100); }
+    function tick(){ if(!state.running) return; state.elapsed=(performance.now()-state.startAt)/1000; timerEl.textContent=state.elapsed.toFixed(1)+'s'; correctEl.textContent=state.correct; mistakesEl.textContent=state.mistakes; targetEl.textContent=state.order[state.nextIndex] ?? '完成'; avgIntervalEl.textContent=getAvgInterval()?getAvgInterval().toFixed(2)+'s':'—'; }
+    function renderBoard(lastClicked, wasCorrect){ boardEl.innerHTML=''; state.numbers.forEach((num, idx)=>{ const div=document.createElement('button'); div.className='cell'; if(lastClicked===idx) div.classList.add(wasCorrect?'hit':'miss'); if(state.order.slice(0,state.nextIndex).includes(num)) div.classList.add('done'); div.textContent=num; div.onclick=()=>onCellClick(idx,num); boardEl.appendChild(div);}); tick(); }
+    function vibrate(pattern){ if (navigator.vibrate) navigator.vibrate(pattern); }
+    function onCellClick(idx,num){ if(!state.running||state.finished) return; state.clicks++; const target=state.order[state.nextIndex]; const ok=num===target; if(ok){ vibrate(18); state.correct++; state.nextIndex++; state.clickTimes.push((performance.now()-state.startAt)/1000); renderBoard(idx,true); if(state.nextIndex>=state.order.length) finishGame(); } else { vibrate([35, 30, 35]); state.mistakes++; renderBoard(idx,false);} }
+    function getAvgInterval(){ if(state.clickTimes.length<=1) return null; let sum=0; for(let i=1;i<state.clickTimes.length;i++) sum += state.clickTimes[i]-state.clickTimes[i-1]; return sum/(state.clickTimes.length-1); }
+    function finishGame(){ state.finished=true; state.running=false; clearInterval(state.timerId); vibrate([40, 40, 80]); const speedFactor=Math.max(0,300-state.elapsed*8); const accuracy=state.clicks?state.correct/state.clicks:0; const sizeBonus=state.gridSize*25; state.score=Math.round(speedFactor+accuracy*120+sizeBonus-state.mistakes*10); roundSummaryEl.textContent=`完成！${state.gridSize}×${state.gridSize} 用時 ${state.elapsed.toFixed(1)}s，失誤 ${state.mistakes} 次，分數 ${state.score}。`; saveBtn.disabled=!currentUser; if(!currentUser) roundSummaryEl.textContent += ' 但還沒選使用者，無法保存。'; targetEl.textContent='完成'; avgIntervalEl.textContent=getAvgInterval()?getAvgInterval().toFixed(2)+'s':'—'; }
+    async function loadRuns(){ loadCurrentUser(); if(!currentUser){ runs=[]; refreshDashboard(); return; } const res = await fetch(`/api/schulte/runs?limit=500&user_id=${currentUser.id}`); const data = await res.json(); runs = (data.runs || []).reverse(); refreshDashboard(); }
+    async function saveRun(){ if(!state.finished) return; if(!currentUser) return alert('先回首頁選使用者'); const avgInterval=getAvgInterval(); const quarter=Math.floor(state.clickTimes.length/5)||1; const firstChunk=state.clickTimes[Math.min(quarter-1,state.clickTimes.length-1)]||0; const lastChunk=state.elapsed-(state.clickTimes[Math.max(0,state.clickTimes.length-quarter-1)]||0); const payload={ user_id:currentUser.id, played_at:new Date().toISOString(), mode:state.mode, grid_size:state.gridSize, total_numbers:state.totalNumbers, time_sec:Number(state.elapsed.toFixed(2)), correct_count:state.correct, mistakes:state.mistakes, clicks:state.clicks, avg_interval_sec:avgInterval?Number(avgInterval.toFixed(3)):null, first_chunk_sec:Number(firstChunk.toFixed(2)), last_chunk_sec:Number(lastChunk.toFixed(2)), score:state.score, condition:document.getElementById('condition').value.trim(), notes:document.getElementById('notes').value.trim() }; const res=await fetch('/api/schulte/runs',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)}); const data=await res.json(); if(data.ok){ vibrate([25,25,25]); saveBtn.disabled=true; roundSummaryEl.textContent += ' 已保存。'; await loadRuns(); } else { roundSummaryEl.textContent = '保存失败：' + (data.error || '未知错误'); } }
+    function refreshDashboard(){ document.getElementById('totalRuns').textContent=runs.length; if(runs.length){ const best=[...runs].sort((a,b)=>a.time_sec-b.time_sec)[0]; const avgMistakes=runs.reduce((s,r)=>s+r.mistakes,0)/runs.length; const last5=runs.slice(-5); const avgScore5=last5.reduce((s,r)=>s+r.score,0)/last5.length; document.getElementById('bestTime').textContent=best.time_sec.toFixed(1)+'s'; document.getElementById('avgMistakes').textContent=avgMistakes.toFixed(1); document.getElementById('avgScore5').textContent=avgScore5.toFixed(0);} else { document.getElementById('bestTime').textContent='—'; document.getElementById('avgMistakes').textContent='—'; document.getElementById('avgScore5').textContent='—'; }
+      const filterPreset=document.getElementById('filterPreset').value; const sortBy=document.getElementById('sortBy').value; let filtered=[...runs]; if(filterPreset!=='all') filtered=filtered.filter(r=>String(r.grid_size)===filterPreset); if(sortBy==='bestTime') filtered.sort((a,b)=>a.time_sec-b.time_sec); else if(sortBy==='bestScore') filtered.sort((a,b)=>b.score-a.score); else filtered.sort((a,b)=>new Date(b.played_at)-new Date(a.played_at)); const body=document.getElementById('historyBody'); body.innerHTML=''; filtered.forEach((r,i)=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${i+1}</td><td>${new Date(r.played_at).toLocaleString()}</td><td>${r.grid_size}×${r.grid_size} / ${r.mode==='asc'?'順序':'倒序'}</td><td>${r.score}</td><td>${r.mistakes}</td><td>${r.avg_interval_sec ? r.avg_interval_sec.toFixed(2)+'s' : '—'}</td><td>${escapeHtml(r.notes || '-')}</td>`; tr.title=[`狀態: ${r.condition || '-'}`, `前段耗時: ${r.first_chunk_sec}s`, `後段耗時: ${r.last_chunk_sec}s`].filter(Boolean).join('\n'); body.appendChild(tr);}); drawChart(runs); }
+    function drawChart(dataRuns){ const ctx=document.getElementById('trendChart'); const labels=dataRuns.map((r,i)=>`${i+1}`); const scoreData=dataRuns.map(r=>r.score); const timeData=dataRuns.map(r=>r.time_sec); if(chart) chart.destroy(); chart=new Chart(ctx,{ type:'line', data:{ labels, datasets:[{ label:'分數', data:scoreData, borderColor:'#7c9cff', backgroundColor:'rgba(124,156,255,.18)', tension:.25, yAxisID:'y' },{ label:'時間(秒)', data:timeData, borderColor:'#4ee0c1', backgroundColor:'rgba(78,224,193,.18)', tension:.25, yAxisID:'y1' }]}, options:{ responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false}, plugins:{ legend:{ labels:{ color:'#eef2ff'}}}, scales:{ x:{ ticks:{ color:'#a6b0d8'}, grid:{ color:'rgba(166,176,216,.08)'}}, y:{ ticks:{ color:'#a6b0d8'}, grid:{ color:'rgba(166,176,216,.08)'}}, y1:{ position:'right', ticks:{ color:'#a6b0d8'}, grid:{ drawOnChartArea:false }}}}}); }
+    function exportRuns(){ const blob=new Blob([JSON.stringify(runs,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='schulte-grid-runs.json'; a.click(); URL.revokeObjectURL(a.href); }
+    async function clearRuns(){ if(!currentUser) return alert('先選使用者'); if(!confirm('確定要清空這個使用者的歷史紀錄嗎？')) return; await fetch('/api/schulte/runs/clear',{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ user_id: currentUser.id })}); await loadRuns(); }
+    const escapeHtml=text=>String(text).replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+    document.getElementById('startBtn').onclick=startGame; document.getElementById('resetRoundBtn').onclick=startGame; saveBtn.onclick=saveRun; document.getElementById('exportBtn').onclick=exportRuns; document.getElementById('clearBtn').onclick=clearRuns; document.getElementById('filterPreset').onchange=refreshDashboard; document.getElementById('sortBy').onchange=refreshDashboard;
+    loadCurrentUser(); loadRuns(); startGame();
+  </script>
+</body>
+</html>

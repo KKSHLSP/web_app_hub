@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MBTI 測試</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root { --bg:#0f1221; --card:#181c31; --card2:#202744; --text:#eef2ff; --muted:#a6b0d8; --accent:#7c9cff; --line:#2d355d; --ok:#4ee0c1; }
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,sans-serif;background:linear-gradient(180deg,#0b0e1a 0%,#13182b 100%);color:var(--text)}
+    .wrap{max-width:1200px;margin:0 auto;padding:24px}.grid{display:grid;gap:16px;grid-template-columns:1.15fr .95fr}.card{background:rgba(24,28,49,.92);border:1px solid var(--line);border-radius:18px;padding:18px}
+    button,select,textarea{background:var(--card2);color:var(--text);border:1px solid #36406c;border-radius:12px;padding:10px 12px} button{cursor:pointer}.primary{background:var(--accent);border-color:transparent;color:#fff}.good{background:var(--ok);border-color:transparent;color:#09231d}
+    .question{padding:14px;border:1px solid var(--line);border-radius:14px;background:#12172a;margin-bottom:12px}.subtle{color:var(--muted);font-size:13px}.badge{display:inline-block;padding:6px 10px;border-radius:999px;border:1px solid #3d4877;color:var(--muted);font-size:12px}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .choiceBox{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}.pill{display:inline-block;padding:4px 8px;border-radius:999px;background:#25305c;font-size:12px}.big{font-size:44px;font-weight:900}.metric{padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:#13182c}.metrics{display:flex;gap:10px;flex-wrap:wrap}.history{max-height:360px;overflow:auto} table{width:100%;border-collapse:collapse;font-size:13px} th,td{border-bottom:1px solid var(--line);text-align:left;padding:10px 8px} th{color:var(--muted)} canvas{width:100% !important;max-height:260px}
+    .descBox{padding:14px;border:1px solid var(--line);border-radius:14px;background:#12172a;margin-top:12px;line-height:1.6}.dim{margin-top:10px;padding:10px 12px;border-radius:12px;background:#13182c;border:1px solid var(--line)}
+    @media (max-width:920px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <p><a href="/" style="color:#9cb8ff;text-decoration:none">← 返回合集首頁</a></p>
+    <div class="row" style="justify-content:space-between;margin-bottom:12px"><div><h1 style="margin:0">MBTI 測試</h1><p class="subtle">擴充版 32 題，適合做更穩一點的快速自測。結果按使用者分開保存，並提供更完整的類型說明。</p></div><div class="badge" id="userBadge">未選使用者</div></div>
+    <div class="grid">
+      <section class="card">
+        <div class="row" style="justify-content:space-between"><h2 style="margin:0">題目</h2><button class="primary" id="submitBtn">提交測試</button></div>
+        <p class="subtle">每題請在 -2 到 +2 間選擇：越偏左越接近前者，越偏右越接近後者，0 表示中間。</p>
+        <div id="questions"></div>
+        <div class="row"><label>備註</label></div>
+        <textarea id="notes" placeholder="可寫：今天狀態、是幫誰測的、對結果的感覺。"></textarea>
+      </section>
+      <section class="card">
+        <h2>結果與歷史</h2>
+        <div id="resultBox" style="display:none">
+          <div class="big" id="typeText">INTJ</div>
+          <p class="subtle" id="descText"></p>
+          <div class="metrics">
+            <div class="metric"><div class="subtle">E / I</div><div id="eiScore">—</div></div>
+            <div class="metric"><div class="subtle">S / N</div><div id="snScore">—</div></div>
+            <div class="metric"><div class="subtle">T / F</div><div id="tfScore">—</div></div>
+            <div class="metric"><div class="subtle">J / P</div><div id="jpScore">—</div></div>
+          </div>
+          <div class="descBox">
+            <strong>類型說明</strong>
+            <div id="longDesc" style="margin-top:8px"></div>
+          </div>
+          <div class="descBox">
+            <strong>維度解讀</strong>
+            <div id="dimDesc"></div>
+          </div>
+        </div>
+        <div style="margin-top:16px"><h3>趨勢</h3><canvas id="trendChart"></canvas></div>
+        <div style="margin-top:16px"><div class="row" style="justify-content:space-between"><h3 style="margin:0">歷史</h3><button id="clearBtn">清空本用戶紀錄</button></div><div class="history"><table><thead><tr><th>#</th><th>時間</th><th>類型</th><th>摘要</th></tr></thead><tbody id="historyBody"></tbody></table></div></div>
+      </section>
+    </div>
+  </div>
+  <script>
+    const QUESTIONS = [
+      ['EI','在聚會裡，你通常更容易主動開場','在聚會裡，你通常更傾向等熟悉後再說話'],
+      ['EI','長時間社交後，你反而更有精神','長時間社交後，你更想獨處恢復'],
+      ['EI','你常邊想邊說','你常先想清楚再說'],
+      ['EI','比起單獨摸索，你更喜歡直接和人互動推進','比起直接互動，你更喜歡自己先整理思路'],
+      ['EI','你更常主動製造話題','你更常等待自然進入話題'],
+      ['EI','現場反應對你來說比較自然','書面整理對你來說比較自然'],
+      ['EI','你更容易從外部刺激獲得動力','你更容易從內在興趣獲得動力'],
+      ['EI','你傾向先把想法拋出去再修正','你傾向先在腦中打磨再表達'],
+
+      ['SN','你更相信具體經驗與眼前事實','你更容易被可能性與隱含意義吸引'],
+      ['SN','你更喜歡可落地、實際的方法','你更喜歡概念、模型與腦洞'],
+      ['SN','你注意到的是細節是否對得上','你注意到的是整體方向與潛在模式'],
+      ['SN','你傾向一步一步按部就班','你傾向先看全貌再跳著做'],
+      ['SN','你做事時更看重已知可靠資訊','你做事時更願意押注新可能'],
+      ['SN','你對熟悉流程更安心','你對新方法更有興趣'],
+      ['SN','你描述事情時更偏還原事實','你描述事情時更偏提煉意義'],
+      ['SN','你更容易記住具體發生了什麼','你更容易記住背後代表了什麼'],
+
+      ['TF','做決定時，你更看重邏輯是否一致','做決定時，你更在意人感受是否被照顧'],
+      ['TF','你評價事情時偏向直接指出問題','你評價事情時偏向顧及氣氛與關係'],
+      ['TF','你更重視公平一致的標準','你更重視具體處境中的體諒'],
+      ['TF','你更容易先分析對錯','你更容易先感受對方處境'],
+      ['TF','別人來找你傾訴時，你會先想解法','別人來找你傾訴時，你會先陪伴理解'],
+      ['TF','你更能接受直白批評','你更在意表達方式是否溫和'],
+      ['TF','你偏好把事情講清楚','你偏好把關係顧好'],
+      ['TF','你更傾向理性切割問題','你更傾向整體考慮人的影響'],
+
+      ['JP','你喜歡先定計畫再推進','你喜歡保留彈性邊走邊調'],
+      ['JP','任務快完成時你會更安心','任務有選擇空間時你會更自在'],
+      ['JP','你偏好明確截止與節奏','你偏好自由安排與即興'],
+      ['JP','旅行時你偏向先排好行程','旅行時你偏向到時看心情決定'],
+      ['JP','清單被打勾會讓你很舒服','留點空白和彈性會讓你更舒服'],
+      ['JP','你較常提早處理事情','你較常臨近截止才進入狀態'],
+      ['JP','你偏好收尾完成一件再說','你偏好多線並行保留選項'],
+      ['JP','事情定下來你比較安心','事情還能改你比較安心']
+    ];
+
+    const DESCS = {
+      INTJ:{short:'偏策略、獨立、重結構。通常喜歡先建模再行動。', long:'INTJ 常被描述為「策略規劃者」。這類型通常很重視系統、效率與長期結構，喜歡先理解整體邏輯，再決定最有效的行動路徑。面對混亂時，會自然地想把事情抽象成模型或框架。優點是清醒、能看長線、有獨立判斷；代價則可能是顯得距離感重，或者對低效率、低邏輯的事情耐受度較低。'},
+      INTP:{short:'偏分析、好奇、自由探索。容易對概念問題上頭。', long:'INTP 常被看作「概念分析者」。他們很喜歡拆問題、問為什麼、追底層原理，也很容易沉迷在理論、模型與想法之中。這類型的優勢是思辨能力強、能從不同角度看事情；但有時也可能因為過度分析而拖延行動，或者對規訓式流程感到厭煩。'},
+      ENTJ:{short:'偏推進、決斷、重效率。擅長把事情往前推。', long:'ENTJ 常被稱為「指揮者」或「推進型管理者」。這類型通常擅長建立方向、分配資源、推動執行，很自然地會進入組織與決策角色。優勢是目標感強、能扛壓、敢做取捨；但也可能因為太強勢或太追求效率，而忽略情緒與節奏。'},
+      ENTP:{short:'偏點子、辯證、靈活。喜歡可能性與新玩法。', long:'ENTP 是典型的「點子型探索者」。這類型通常反應快、點子多、喜歡辯論與腦力刺激，對新玩法、新角度、新可能性很有興趣。優勢是創造性強、能快速打開局面；但風險是容易分心、跳題，或者對重複維護型工作失去耐心。'},
+      INFJ:{short:'偏洞察、理想、內在一致。常同時看見人和結構。', long:'INFJ 通常被描述為「洞察型理想主義者」。他們既能感知他人的細膩情緒，也很在乎事情背後的價值與長遠意義。優勢是深度、理解力與使命感；難點是容易內耗，或因為標準太高而對自己與關係有壓力。'},
+      INFP:{short:'偏價值、真誠、內在感受。重視意義感與自我認同。', long:'INFP 是典型的「價值導向型」人格。他們重視真誠、內心感受與個人信念，通常不喜歡過度功利、僵硬或虛假的環境。優勢是有同理心、有創造性、能感受到細膩的意義；代價是有時會對現實節奏不耐，或者因理想與現實落差而疲憊。'},
+      ENFJ:{short:'偏帶動、共感、組織。容易照顧到群體氛圍。', long:'ENFJ 常被視為「帶人型」人格。他們通常很懂怎麼照顧氛圍、整合團隊、鼓勵別人，也常自然走向協調和引導的位置。優勢是關係敏銳、表達力強、凝聚力高；但也可能過度替別人操心，或把責任扛得太滿。'},
+      ENFP:{short:'偏熱情、好奇、感染力。靠興趣驅動很強。', long:'ENFP 往往是非常有活力與感染力的類型。他們對新鮮感、可能性、人與想法的連結都很敏感，容易因為熱愛而投入很多。優勢是靈活、真誠、帶氣氛；挑戰則是穩定度與持續性，容易因興趣波動而改變方向。'},
+      ISTJ:{short:'偏穩定、可靠、務實。重責任與秩序。', long:'ISTJ 是典型的「穩定執行者」。這類型通常重視規則、責任與可預期性，做事扎實、耐心，對承諾和流程有較高敏感度。優勢是可靠、能落地、少花架子；風險是有時對變動或模糊空間容忍度低。'},
+      ISFJ:{short:'偏照顧、細緻、耐心。很會記住他人需要。', long:'ISFJ 通常是安靜但很會照顧人的類型。他們擅長記住細節、照顧實際需求，對關係與責任感有穩定投入。優勢是溫和、可靠、持續性高；但有時可能過度壓抑自己，把別人的需求放太前面。'},
+      ESTJ:{short:'偏執行、管理、果斷。重規則與落地。', long:'ESTJ 常是很典型的執行型與管理型人格。他們對秩序、標準、責任與效率有明確要求，擅長把事情安排到位。優勢是務實、果斷、推進力強；代價可能是對模糊和拖沓不耐，容易給人壓迫感。'},
+      ESFJ:{short:'偏協調、熱心、關係導向。擅長維持群體運作。', long:'ESFJ 是很會維持群體穩定與關係流動的類型。他們通常重視互動、照顧、禮貌與團體感，容易成為聚合大家的人。優勢是貼心、務實、有責任感；但有時也可能太在意外界評價或他人反應。'},
+      ISTP:{short:'偏冷靜、實作、即時處理。擅長拆解與修東西。', long:'ISTP 通常給人安靜、直接、很能處理具體問題的印象。他們擅長觀察、動手、快速找出最有效的處理方式。優勢是實作強、臨場穩、少廢話；但有時在情感表達上比較節制，也不喜歡被束縛太緊。'},
+      ISFP:{short:'偏感受、審美、柔和。重個人體驗與真實感。', long:'ISFP 常被視為溫和但有自我節奏的類型。他們重感受、審美與當下體驗，也通常很重視真實、不做作的生活方式。優勢是敏銳、細膩、有美感；但有時可能不喜歡高壓衝突或過度制度化。'},
+      ESTP:{short:'偏行動、臨場、敢衝。喜歡即時回饋。', long:'ESTP 是很典型的行動派人格。他們通常反應快、敢試、喜歡即時互動與真實場景，不太喜歡紙上談兵。優勢是臨場感、魄力、實戰力；但風險是可能衝太快，或對長期規劃耐心較低。'},
+      ESFP:{short:'偏活力、表達、體驗導向。帶氣氛能力強。', long:'ESFP 通常很會感受當下、帶動氣氛，也擅長把生活過得有存在感。他們重體驗、情感、互動與真實連結。優勢是活力、親和、感染力；但有時可能因太重感受與當下而忽略長期整理。'}
+    };
+
+    let currentUser = null, runs = [], chart;
+    function loadCurrentUser(){ try{ currentUser = JSON.parse(localStorage.getItem('hub_selected_user')||'null'); }catch{ currentUser = null; } document.getElementById('userBadge').textContent = currentUser ? `使用者：${currentUser.name}` : '未選使用者'; }
+    function renderQuestions(){ const root = document.getElementById('questions'); root.innerHTML=''; QUESTIONS.forEach((q,i)=>{ const div=document.createElement('div'); div.className='question'; div.innerHTML = `<div><strong>Q${i+1}</strong> <span class="pill">${q[0]}</span></div><p>${q[1]} <span class="subtle">↔</span> ${q[2]}</p><div class="choiceBox">${[-2,-1,0,1,2].map(v=>`<label><input type="radio" name="q${i}" value="${v}" ${v===0?'checked':''}/> ${v}</label>`).join('')}</div><p class="subtle">-2 偏左，+2 偏右，0 中立</p>`; root.appendChild(div); }); }
+    function calc(){ const totals = { EI:0, SN:0, TF:0, JP:0 }; QUESTIONS.forEach((q,i)=>{ const val = Number((document.querySelector(`input[name=q${i}]:checked`)||{}).value || 0); totals[q[0]] += val; });
+      const type = `${totals.EI <= 0 ? 'E':'I'}${totals.SN <= 0 ? 'S':'N'}${totals.TF <= 0 ? 'T':'F'}${totals.JP <= 0 ? 'J':'P'}`;
+      return { type, totals };
+    }
+    function showResult(result){ const profile = DESCS[result.type] || { short:'輕量版結果，僅供參考。', long:'這是偏娛樂與自我觀察用途的快速版 MBTI 測試，不代表專業心理評估。' };
+      document.getElementById('resultBox').style.display='block'; document.getElementById('typeText').textContent=result.type; document.getElementById('descText').textContent=profile.short; document.getElementById('longDesc').textContent=profile.long; document.getElementById('eiScore').textContent = fmtPair('E','I', result.totals.EI); document.getElementById('snScore').textContent = fmtPair('S','N', result.totals.SN); document.getElementById('tfScore').textContent = fmtPair('T','F', result.totals.TF); document.getElementById('jpScore').textContent = fmtPair('J','P', result.totals.JP); document.getElementById('dimDesc').innerHTML = [dimLine('E / I', result.totals.EI, 'E 偏向外部互動與即時表達', 'I 偏向內部整理與獨處恢復'), dimLine('S / N', result.totals.SN, 'S 偏向具體事實與經驗', 'N 偏向可能性、模式與抽象連結'), dimLine('T / F', result.totals.TF, 'T 偏向邏輯一致與分析判斷', 'F 偏向價值感受與人際考量'), dimLine('J / P', result.totals.JP, 'J 偏向計畫、收束與確定感', 'P 偏向彈性、開放與保留選項')].join(''); }
+    function fmtPair(a,b,v){ return v === 0 ? `平衡 (${a}/${b})` : (v < 0 ? `${a} ${Math.abs(v)}` : `${b} ${Math.abs(v)}`); }
+    function dimLine(title, score, leftText, rightText){ return `<div class="dim"><strong>${title}</strong><div class="subtle">${score < 0 ? leftText : score > 0 ? rightText : '兩側相對平衡'}</div><div>分數：${score}</div></div>`; }
+    async function submitTest(){ if(!currentUser) return alert('先回首頁選使用者'); const result = calc(); showResult(result); const payload = { user_id: currentUser.id, tested_at: new Date().toISOString(), mbti_type: result.type, ei_score: result.totals.EI, sn_score: result.totals.SN, tf_score: result.totals.TF, jp_score: result.totals.JP, notes: document.getElementById('notes').value.trim() };
+      const res = await fetch('/api/mbti/runs', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }); const data = await res.json(); if(!data.ok) return alert(data.error || '保存失敗'); await loadRuns(); }
+    async function loadRuns(){ if(!currentUser){ runs=[]; refreshHistory(); return; } const data = await fetch(`/api/mbti/runs?user_id=${currentUser.id}&limit=200`).then(r=>r.json()); runs = (data.runs || []).reverse(); refreshHistory(); }
+    function refreshHistory(){ const body = document.getElementById('historyBody'); body.innerHTML=''; runs.slice().reverse().forEach((r,i)=>{ const tr=document.createElement('tr'); tr.innerHTML = `<td>${i+1}</td><td>${new Date(r.tested_at).toLocaleString()}</td><td>${r.mbti_type}</td><td>${escapeHtml(r.notes || '-')}</td>`; tr.title = `EI:${r.ei_score} SN:${r.sn_score} TF:${r.tf_score} JP:${r.jp_score}`; body.appendChild(tr); }); drawChart(); }
+    function drawChart(){ const ctx = document.getElementById('trendChart'); const labels = runs.map((r,i)=>`${i+1}`); const ei = runs.map(r=>r.ei_score), sn = runs.map(r=>r.sn_score), tf = runs.map(r=>r.tf_score), jp = runs.map(r=>r.jp_score); if(chart) chart.destroy(); chart = new Chart(ctx,{ type:'line', data:{ labels, datasets:[ {label:'E/I', data:ei, borderColor:'#7c9cff', tension:.25}, {label:'S/N', data:sn, borderColor:'#4ee0c1', tension:.25}, {label:'T/F', data:tf, borderColor:'#ffc36b', tension:.25}, {label:'J/P', data:jp, borderColor:'#ff7373', tension:.25} ] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{labels:{color:'#eef2ff'}}}, scales:{ x:{ticks:{color:'#a6b0d8'}, grid:{color:'rgba(166,176,216,.08)'}}, y:{ticks:{color:'#a6b0d8'}, grid:{color:'rgba(166,176,216,.08)'}} } } }); }
+    async function clearRuns(){ if(!currentUser) return alert('先選使用者'); if(!confirm('確定清空這個使用者的 MBTI 紀錄嗎？')) return; await fetch('/api/mbti/runs/clear',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ user_id: currentUser.id }) }); await loadRuns(); }
+    const escapeHtml=text=>String(text).replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+    loadCurrentUser(); renderQuestions(); loadRuns(); document.getElementById('submitBtn').onclick = submitTest; document.getElementById('clearBtn').onclick = clearRuns;
+  </script>
+</body>
+</html>
