@@ -5,6 +5,7 @@ __pycache__/
 .env
 .env.*
 .DS_Store
+.idea/
 
 # runtime data
 data/*.db
@@ -12,3 +13,8 @@ data/*.sqlite
 data/uploads/
 data/results/
 data/cache/
+data/reader_ai_records/
+data/reader_ai_runs/
+
+# local book corpus and generated source lists
+writer/
