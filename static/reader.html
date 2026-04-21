@@ -333,7 +333,7 @@
       <h2>辰趣閣</h2>
       <p class="subtle">這個入口獨立於另外兩個 app，需要額外密碼。預設已適配手機瀏覽器，正文為滑動閱讀。</p>
       <div style="display:grid; gap:12px;">
-        <input id="readerPassword" type="password" placeholder="輸入辰趣閣密碼（只輸入數字即可）" />
+        <input id="readerPassword" type="text" inputmode="numeric" autocomplete="current-password" maxlength="32" placeholder="輸入辰趣閣密碼（生日可只輸入數字）" />
         <button class="btn-accent" id="unlockBtn">解鎖閱讀庫</button>
         <div class="status-line" id="gateStatus"></div>
       </div>
@@ -514,6 +514,26 @@
       return work.ai_score != null ? `AI ${work.score}` : `預估 ${work.score}`;
     }
 
+    function formatDateDigits(digits) {
+      let value = digits.replace(/\D/g, '').slice(0, 8);
+      if (value.length > 4) value = `${value.slice(0, 4)}/${value.slice(4)}`;
+      if (value.length > 7) value = `${value.slice(0, 7)}/${value.slice(7, 9)}`;
+      return value;
+    }
+
+    function attachSmartDateMask(input) {
+      input.addEventListener('input', event => {
+        const raw = event.target.value;
+        if (/[^0-9/\s]/.test(raw)) return;
+        event.target.value = formatDateDigits(raw);
+      });
+    }
+
+    function onOptionalClick(id, handler) {
+      const element = document.getElementById(id);
+      if (element) element.onclick = handler;
+    }
+
     function renderTags() {
       const topTags = state.facets.tags || [];
       tagStrip.innerHTML = '';
@@ -618,7 +638,7 @@
     async function unlockReader() {
       gateStatus.textContent = '驗證中...';
       try {
-        const password = document.getElementById('readerPassword').value;
+        const password = document.getElementById('readerPassword').value.trim();
         const data = await api('/api/reader/auth', {
           method: 'POST',
           body: JSON.stringify({ password }),
@@ -648,7 +668,9 @@
         state.facets = data.facets || { totalWorks: 0, totalAuthors: 0, tags: [] };
         renderTags();
         renderCatalog();
-        if (!state.currentWork && state.works[0]) await openWork(state.works[0].id, false);
+        if (!state.currentWork && state.works[0]) openWork(state.works[0].id, false).catch(error => {
+          gateStatus.textContent = error.message;
+        });
       } catch (error) {
         gateStatus.textContent = error.message;
         setReaderReady(false);
@@ -681,11 +703,11 @@
           id: String(id),
           user_id: String(state.user?.id || 0),
         });
-        const workPromise = api(`/api/reader/work?${params.toString()}`);
         const cachedContent = state.contentCache.get(id);
         const contentPromise = cachedContent ? Promise.resolve({ content: cachedContent }) : api(`/api/reader/content?id=${id}`);
-        const [data, content] = await Promise.all([workPromise, contentPromise]);
+        const data = await api(`/api/reader/work?${params.toString()}`);
         renderDetail(data.work, data.related || []);
+        const content = await contentPromise;
         if (!cachedContent && content?.content) state.contentCache.set(id, content.content);
         renderContent(content.content, Number(data.work.last_scroll || 0));
         state.hasOpenedProgressSaved = false;
@@ -761,13 +783,15 @@
       document.documentElement.style.setProperty('--reader-size', `${state.fontSize}px`);
     }
 
+    const readerPasswordInput = document.getElementById('readerPassword');
+    attachSmartDateMask(readerPasswordInput);
     document.getElementById('unlockBtn').onclick = unlockReader;
-    document.getElementById('readerPassword').addEventListener('keydown', event => {
+    readerPasswordInput.addEventListener('keydown', event => {
       if (event.key === 'Enter') unlockReader();
     });
-    document.getElementById('refreshBtn').onclick = () => loadWorks().catch(error => alert(error.message));
-    document.getElementById('batchAiBtn').onclick = () => batchRefreshAi().catch(error => alert(error.message));
-    document.getElementById('reindexBtn').onclick = () => reindexLibrary().catch(error => alert(error.message));
+    onOptionalClick('refreshBtn', () => loadWorks().catch(error => alert(error.message)));
+    onOptionalClick('batchAiBtn', () => batchRefreshAi().catch(error => alert(error.message)));
+    onOptionalClick('reindexBtn', () => reindexLibrary().catch(error => alert(error.message)));
     document.getElementById('jumpContinueBtn').onclick = () => {
       if (!state.currentWork) return;
       readerScroll.scrollTop = Number(state.currentWork.last_scroll || 0);
