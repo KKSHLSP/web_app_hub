@@ -14,11 +14,13 @@ from reader_core import (
     DEFAULT_READER_AI_MODEL,
     DEFAULT_READER_AI_TOKEN,
     DEFAULT_READER_AI_URL,
+    READER_TAG_VOCABULARY,
     build_work_record,
     infer_categories,
     infer_tags,
     load_work_text_from_relpath,
     normalize_spaces,
+    normalize_reader_tags,
     safe_json_loads,
     split_paragraphs,
 )
@@ -430,6 +432,7 @@ def build_prompt(
         'existing_categories': categories,
         'existing_tags': tags,
         'allowed_primary_categories': ALLOWED_PRIMARY_CATEGORIES,
+        'allowed_tags': READER_TAG_VOCABULARY,
         'analysis_strategy': strategy,
         'text_char_count': text_char_count,
         'source_char_count': source_char_count,
@@ -446,7 +449,7 @@ def build_prompt(
         ],
         'required_schema': {
             'primary_category': '从 allowed_primary_categories 中选 1 个',
-            'tags': ['3到8个中文标签'],
+            'tags': ['3到8个中文标签；只能从 allowed_tags 中选择，不要自创新标签'],
             'scores': {
                 'overall': '0-100',
                 'emotion': '0-100',
@@ -552,16 +555,11 @@ def normalize_result(
     if primary_category not in ALLOWED_PRIMARY_CATEGORIES:
         primary_category = categories[0] if categories else '都市言情'
     raw_tags = raw.get('tags')
-    merged_tags = [primary_category]
+    merged_tags: list[object] = [primary_category]
     if isinstance(raw_tags, list):
         merged_tags.extend(str(item).strip() for item in raw_tags if str(item).strip())
     merged_tags.extend(tags)
-    unique_tags = []
-    seen = set()
-    for tag in merged_tags:
-        if tag and tag not in seen:
-            seen.add(tag)
-            unique_tags.append(tag)
+    unique_tags = normalize_reader_tags(merged_tags, [primary_category], max_tags=8)
     scores = raw.get('scores') if isinstance(raw.get('scores'), dict) else {}
     overall = clamp_score(scores.get('overall'), 60)
     emotion = clamp_score(scores.get('emotion'), overall)

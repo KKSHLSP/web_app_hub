@@ -17,6 +17,7 @@ from reader_core import (
     build_content_payload,
     ensure_reader_schema,
     get_reader_settings,
+    normalize_reader_tags,
     rank_works,
     row_to_work_dict,
     safe_json_loads,
@@ -276,11 +277,12 @@ def build_reader_catalog(conn, user_id, query='', selected_tags=None, sort='reco
 
 
 def get_reader_facets(conn):
-    rows = conn.execute('SELECT author, tags_json FROM reader_works').fetchall()
+    rows = conn.execute('SELECT author, tags_json, categories_json FROM reader_works').fetchall()
     authors = {row['author'] for row in rows}
     counter = Counter()
     for row in rows:
-        for tag in safe_json_loads(row['tags_json'], []):
+        categories = safe_json_loads(row['categories_json'], [])
+        for tag in normalize_reader_tags(safe_json_loads(row['tags_json'], []), categories, max_tags=10):
             counter[tag] += 1
     tags = [{'name': name, 'count': count} for name, count in counter.most_common(30)]
     return {

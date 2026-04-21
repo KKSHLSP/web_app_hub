@@ -24,6 +24,9 @@ reader_ai_batch.py
 reader_synopsis_backfill.py
   原文簡介回填腳本：不調模型，掃描已完成作品，將可用的原文簡介清洗後覆蓋 summary / intro。
 
+reader_tag_normalize.py
+  標籤收斂腳本：把舊資料與 AI 自由輸出的 tag 正規化到固定詞表。
+
 launch_reader_ai_batch.sh
   macOS 後台啟動器：用 screen + caffeinate 長時間跑批處理，避免電腦休眠。
 
@@ -43,7 +46,7 @@ static/settings.html
 - `relpath`：相對於倉庫根目錄的作品文件路徑。
 - `title` / `author`：作品展示與搜索。
 - `summary` / `intro`：`summary` 是詳情頁長簡介，`intro` 是列表與關聯推薦卡片短文案。
-- `tags_json` / `categories_json` / `primary_category`：推薦與篩選依據。
+- `tags_json` / `categories_json` / `primary_category`：推薦與篩選依據。`tags_json` 使用固定詞表 `reader-v1`，避免自由 tag 膨脹。
 - `ai_score`：總評分。
 - `ai_metrics_json`：細分評分與批處理元資料，例如 `analysis_quality`、`analysis_preset`、`analysis_source_char_count`。
 - `ai_status`：`pending`、`running`、`done`、`failed`。
@@ -83,7 +86,24 @@ static/settings.html
 - 不取 `92%` 之後，降低結局、番外、作者後記干擾。
 - 若原文開頭已有 `內容簡介`、`作品簡介`、`文案` 等簡介欄，Python 會先清洗並直接寫入較長的 `summary`，再裁出較短的 `intro`；模型只輸出分類、標籤、評分與推薦理由。
 - 若沒有原文簡介，模型才生成無劇透 `summary` / `intro`。`summary` 面向詳情頁，目標約 `120-220` 字；`intro` 面向列表卡片，目標約 `55-100` 字。
-- 生成後寫入 `analysis_quality=low`、`analysis_sample_profile=weighted`、`analysis_summary_source`，之後可專門重跑低質量結果。
+- prompt 會提供固定 `allowed_tags`，模型只能從白名單選 tag；落庫前還會做一次 Python 歸一化。
+- 生成後寫入 `analysis_quality=low`、`analysis_sample_profile=weighted`、`analysis_summary_source`、`analysis_tags_vocabulary`，之後可專門重跑低質量結果。
+
+固定 tag：
+
+- 詞表版本為 `reader-v1`，目前約 68 個 canonical tag。
+- 核心分類必定保留：`虐文`、`骨科文`、`黄文`、`甜宠`、`豪门总裁`、`青梅竹马`、`先婚后爱`、`强制爱` 等。
+- 近義詞會收斂，例如 `虐恋情深 -> 虐文`、`都市情感 -> 都市言情`、`强取豪夺 -> 强制爱`、`暧昧拉扯 -> 双向拉扯`。
+
+標籤回填：
+
+```bash
+python3 reader_tag_normalize.py --status all --dry-run
+python3 reader_tag_normalize.py --status all
+```
+
+- `dry-run` 會報告正規化前後 distinct tag 數量。
+- 實際執行時只處理非 `running` 行，避免與批處理同時寫同一列。
 
 原文簡介回填：
 

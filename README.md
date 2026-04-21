@@ -10,6 +10,7 @@
 - MBTI 測試：題目流程、結果保存。
 - 私密閱讀系統：獨立密碼入口、搜索、標籤篩選、推薦排序、關聯推薦、評分排序、手機滑動閱讀、進度保存。
 - 本地 AI 書庫分析：生成無劇透簡介、分類、標籤、總分與細分評分。
+- 固定標籤詞表：AI 只能輸出受控 tag，避免幾千個近義 tag 膨脹。
 - 輕量使用者管理：名稱、密碼、生日等基礎設定。
 - SQLite 持久化：單機/小規模自用部署優先。
 
@@ -96,6 +97,7 @@ Token/API key: 在 /settings 補入
 - 讀取 `/models`，對模型名做 fuzzy match。
 - 使用 `chat_template_kwargs.enable_thinking=false` 關閉 thinking。
 - 要求 JSON object 輸出。
+- 將模型 tag 限制在固定白名單 `reader-v1`，並把近義詞歸一化，例如 `虐恋情深 -> 虐文`、`都市情感 -> 都市言情`、`强取豪夺 -> 强制爱`。
 - 對簡介做無劇透清洗，避免結局、真相、死亡、身份揭曉、懷孕、車禍等中後段劇情外洩。
 
 ## AI 批處理
@@ -147,6 +149,15 @@ python3 reader_synopsis_backfill.py --status done
 
 這個腳本只處理非 `running` 行，會把可提取的原文簡介標記為 `analysis_summary_source=source_synopsis`，並把報告寫到 `data/reader_synopsis_reports/`。
 
+如果需要收斂舊資料裡的自由 tag：
+
+```bash
+python3 reader_tag_normalize.py --status all --dry-run
+python3 reader_tag_normalize.py --status all
+```
+
+目前固定詞表包含 `虐文`、`骨科文`、`黄文` 等核心分類，並保留常用題材 tag，例如 `豪门总裁`、`先婚后爱`、`强制爱`、`追妻火葬场`、`契约婚姻`、`替身文学`、`青梅竹马`。
+
 ## 資料邊界
 
 GitHub 保存：
@@ -157,6 +168,7 @@ reader_core.py
 reader_ai.py
 reader_ai_batch.py
 reader_synopsis_backfill.py
+reader_tag_normalize.py
 launch_reader_ai_batch.sh
 static/
 docs/
@@ -170,6 +182,7 @@ data/hub.db
 data/reader_ai_runs/
 data/reader_ai_records/
 data/reader_synopsis_reports/
+data/reader_tag_reports/
 writer/
 .env
 *.log
