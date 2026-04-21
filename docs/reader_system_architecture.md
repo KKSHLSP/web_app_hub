@@ -58,25 +58,29 @@ static/settings.html
 批處理入口：
 
 ```bash
-./launch_reader_ai_batch.sh --session reader_ai_focused_low_20260421 \
-  --run-dir data/reader_ai_runs/focused_low_20260421_final2 -- \
+./launch_reader_ai_batch.sh --session reader_ai_synopsis_weighted_20260422 \
+  --run-dir data/reader_ai_runs/synopsis_weighted_20260422 -- \
   --mode auto \
   --whole-char-limit 12000 \
-  --spread-chunk-count 3 \
-  --spread-chunk-char-limit 2800 \
+  --spread-chunk-count 4 \
+  --spread-chunk-char-limit 1200 \
+  --sample-profile weighted \
   --timeout 90 \
   --retry-count 1 \
   --quality-tier low \
-  --quality-preset focused-no-spoiler-3x2800
+  --quality-preset synopsis-weighted-4x1200
 ```
 
 目前快跑策略：
 
 - 短文小於 `12000` 字時整本輸入。
-- 長文只取 `3` 個窗口，每段約 `2800` 字。
-- 取樣位置為 `2%`、`52%`、`82%`，避開真正結尾。
+- 長文使用 `weighted` 取樣：開頭與高潮前段少量取樣，中段與核心衝突給更多字數。
+- `4x1200` 的總輸入約 `4800` 字，典型窗口為 `2%`、`42%`、`62%`、`82%`。
+- 也保留 `segmented` 取樣：按章節長度等距分段取固定窗口，適合之後補高質量資料。
 - 不取 `92%` 之後，降低結局、番外、作者後記干擾。
-- 生成後寫入 `analysis_quality=low`，之後可專門重跑低質量結果。
+- 若原文開頭已有 `內容簡介`、`作品簡介`、`文案` 等簡介欄，Python 會先清洗並直接寫入 `summary` / `intro`；模型只輸出分類、標籤、評分與推薦理由。
+- 若沒有原文簡介，模型才生成無劇透 `summary` / `intro`。
+- 生成後寫入 `analysis_quality=low`、`analysis_sample_profile=weighted`、`analysis_summary_source`，之後可專門重跑低質量結果。
 
 無劇透策略：
 

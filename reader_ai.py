@@ -72,6 +72,21 @@ NO_SPOILER_CLAUSE_WORDS = (
     '死亡',
     '死去',
     '身亡',
+    '亡魂',
+    '怀孕',
+    '懷孕',
+    '流产',
+    '流產',
+    '车祸',
+    '車禍',
+    '失忆',
+    '失憶',
+    '绑架',
+    '綁架',
+    '自杀',
+    '自殺',
+    '第三者',
+    '身世',
     '身份揭晓',
     '大结局',
 )
@@ -94,6 +109,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--whole-char-limit', type=int, default=DEFAULT_WHOLE_CHAR_LIMIT, help='Whole-text strategy limit')
     parser.add_argument('--spread-chunk-count', type=int, default=DEFAULT_SPREAD_CHUNK_COUNT, help='Spread strategy chunk count')
     parser.add_argument('--spread-chunk-char-limit', type=int, default=DEFAULT_SPREAD_CHUNK_CHAR_LIMIT, help='Spread strategy chunk size')
+    parser.add_argument('--sample-profile', choices=('focused', 'segmented', 'weighted'), default='focused', help='Spread sampling profile')
     return parser.parse_args()
 
 
@@ -209,24 +225,84 @@ def focused_sample_ratios(chunk_count: int) -> list[tuple[str, float]]:
     ][:chunk_count]
 
 
-def build_spread_excerpt(text: str, chunk_count: int, chunk_char_limit: int) -> tuple[str, int]:
+def weighted_sample_windows(chunk_count: int, chunk_char_limit: int) -> list[tuple[str, float, int]]:
+    total_budget = max(1600, chunk_count * chunk_char_limit)
+    head_limit = max(500, min(900, round(total_budget * 0.16)))
+    tail_limit = max(500, min(900, round(total_budget * 0.16)))
+    middle_budget = max(800, total_budget - head_limit - tail_limit)
+
+    if chunk_count <= 2:
+        return [('开篇钩子', 0.02, head_limit), ('核心冲突', 0.54, middle_budget)]
+    if chunk_count == 3:
+        return [
+            ('开篇钩子', 0.02, head_limit),
+            ('核心冲突', 0.54, middle_budget),
+            ('高潮前段', 0.82, tail_limit),
+        ]
+
+    middle_count = chunk_count - 2
+    labels = ['中段关系', '核心冲突', '情绪拉扯', '危机升级', '高潮铺垫']
+    if middle_count == 2:
+        ratios = [0.42, 0.62]
+        raw_limits = [round(middle_budget * 0.45), middle_budget - round(middle_budget * 0.45)]
+    else:
+        ratios = [0.42] if middle_count == 1 else [0.36 + (0.34 * idx / max(1, middle_count - 1)) for idx in range(middle_count)]
+        weights = [1.0 + idx * 0.12 for idx in range(middle_count)]
+        weight_total = sum(weights)
+        raw_limits = [max(300, round(middle_budget * weight / weight_total)) for weight in weights]
+        if sum(raw_limits) > middle_budget:
+            scale = middle_budget / sum(raw_limits)
+            raw_limits = [max(200, round(limit * scale)) for limit in raw_limits]
+        raw_limits[-1] += middle_budget - sum(raw_limits)
+    middle_windows = []
+    for idx in range(middle_count):
+        ratio = ratios[idx]
+        limit = max(200, raw_limits[idx])
+        label = labels[idx] if idx < len(labels) else f'中段取样{idx + 1}'
+        middle_windows.append((label, ratio, limit))
+
+    return [('开篇钩子', 0.02, head_limit), *middle_windows, ('高潮前段', 0.82, tail_limit)]
+
+
+def segmented_sample_windows(chunk_count: int, chunk_char_limit: int) -> list[tuple[str, float, int]]:
+    if chunk_count <= 1:
+        return [('开篇设定', 0.02, chunk_char_limit)]
+    start_ratio = 0.02
+    end_ratio = 0.84
+    labels = ['开篇设定', '前段推进', '中段关系', '核心冲突', '情绪转折', '高潮前段']
+    windows = []
+    for idx in range(chunk_count):
+        ratio = start_ratio + (end_ratio - start_ratio) * (idx / max(1, chunk_count - 1))
+        label = labels[idx] if idx < len(labels) else f'分段取样{idx + 1}'
+        windows.append((label, ratio, chunk_char_limit))
+    return windows
+
+
+def build_spread_excerpt(text: str, chunk_count: int, chunk_char_limit: int, sample_profile: str) -> tuple[str, int]:
     if len(text) <= chunk_char_limit:
         return text, len(text)
 
     segments: list[str] = []
     seen = set()
-    tail_guard = max(0, round(len(text) * NO_SPOILER_TAIL_GUARD_RATIO) - chunk_char_limit)
-    max_start = max(0, min(len(text) - chunk_char_limit, tail_guard))
-    samples = focused_sample_ratios(chunk_count)
+    default_tail_guard = max(0, round(len(text) * NO_SPOILER_TAIL_GUARD_RATIO) - chunk_char_limit)
+    default_max_start = max(0, min(len(text) - chunk_char_limit, default_tail_guard))
+    if sample_profile == 'weighted':
+        samples = weighted_sample_windows(chunk_count, chunk_char_limit)
+    elif sample_profile == 'segmented':
+        samples = segmented_sample_windows(chunk_count, chunk_char_limit)
+    else:
+        samples = [(label, ratio, chunk_char_limit) for label, ratio in focused_sample_ratios(chunk_count)]
 
-    for idx, (label, ratio) in enumerate(samples, 1):
+    for idx, (label, ratio, sample_limit) in enumerate(samples, 1):
+        tail_guard = max(0, round(len(text) * NO_SPOILER_TAIL_GUARD_RATIO) - sample_limit)
+        max_start = max(0, min(len(text) - sample_limit, tail_guard, default_max_start))
         start = min(round(len(text) * ratio), max_start)
-        segment = window_to_paragraph(text, start, chunk_char_limit)
+        segment = window_to_paragraph(text, start, sample_limit)
         compact = normalize_spaces(segment)
         if not compact or compact in seen:
             continue
         seen.add(compact)
-        segments.append(f'【片段 {idx}：{label}，约 {round(ratio * 100)}% 处】\n{segment}')
+        segments.append(f'【片段 {idx}：{label}，约 {round(ratio * 100)}% 处，约 {sample_limit} 字】\n{segment}')
 
     joined = '\n\n'.join(segments)
     return joined, len(joined)
@@ -238,6 +314,7 @@ def build_analysis_payload(
     whole_char_limit: int,
     spread_chunk_count: int,
     spread_chunk_char_limit: int,
+    sample_profile: str,
 ) -> tuple[str, str, int]:
     strategy = mode
     if strategy == 'auto':
@@ -246,8 +323,74 @@ def build_analysis_payload(
     if strategy == 'whole':
         return 'whole', text, len(text)
 
-    spread_text, source_char_count = build_spread_excerpt(text, spread_chunk_count, spread_chunk_char_limit)
-    return 'spread', spread_text, source_char_count
+    spread_text, source_char_count = build_spread_excerpt(text, spread_chunk_count, spread_chunk_char_limit, sample_profile)
+    return f'spread:{sample_profile}', spread_text, source_char_count
+
+
+def clean_source_synopsis(value: str) -> str:
+    text = normalize_spaces(value)
+    text = re.sub(r'^[：:【\[\]】\s]+', '', text)
+    text = re.sub(r'^《[^》]{1,80}》(?:（[^）]{1,40}）)?(?:作者[：:]?[^，。；\s]{1,30})?\s*(?:TXT下载|TXT全集下载)?', ' ', text)
+    text = re.sub(r'^[^，。！？；]{1,60}(?:作者[：:]?[^，。！？；\s]{1,30})\s*(?:TXT下载|TXT全集下载)?', ' ', text)
+    text = re.sub(r'[【\[]?(?:书名|書名|作者|内容简介|內容簡介|作品简介|作品簡介|书籍简介|簡介|简介|文案)[】\]]?[：:]?', ' ', text)
+    text = re.sub(r'[【\[]?[^】\]\n]{0,40}(?:内容简介|內容簡介|作品简介|作品簡介|书籍简介|簡介|简介|文案)[】\]]?', ' ', text)
+    text = re.sub(r'(更多好书|TXT全集|完结TXT|www\.|http|本图书由).*', '', text, flags=re.IGNORECASE)
+    text = sanitize_no_spoiler_text(text, 180)
+    if len(text) < 45:
+        return ''
+    if len(text) > 180:
+        text = sanitize_no_spoiler_text(text, 180)
+    noisy_patterns = (
+        r'^作者有话',
+        r'^(序|自序|前言|后记|後記|作者序)\b',
+        r'^(番外|出版|编编|交稿|读者)',
+        r'系列的最后一本',
+    )
+    if any(re.search(pattern, text[:80]) for pattern in noisy_patterns):
+        return ''
+    return text
+
+
+def strip_front_matter_lines(text: str) -> list[str]:
+    lines = []
+    for raw_line in text.replace('\r', '\n').split('\n'):
+        line = normalize_spaces(raw_line)
+        if not line:
+            continue
+        if re.fullmatch(r'[《<【\\[]?.{1,60}[》>】\\]]?(TXT全集)?', line) and ('作者' not in line):
+            if len(line) <= 40 and any(mark in line for mark in ('《', '<', 'TXT全集')):
+                continue
+        if re.match(r'^(作者|整理|录入|校对|书名|出版社)[：:]', line):
+            continue
+        if '更多好书' in line or 'www.' in line.lower() or 'http' in line.lower():
+            continue
+        lines.append(line)
+    return lines
+
+
+def extract_source_synopsis(text: str) -> dict[str, object]:
+    head = text[:6000].replace('\r', '\n')
+    label_match = re.search(
+        r'(?im)^\s*[【\[]?[^】\]\n]{0,40}(?:内容简介|內容簡介|作品简介|作品簡介|书籍简介|簡介|简介|文案)[】\]]?[：:]?\s*\n?',
+        head,
+    )
+    stop_pattern = r'(?im)(?:正文\s*)?(?:楔子|序章|序幕|第一[章回節节]|Chapter\s*1|第[一1][章回節节])'
+    if label_match:
+        rest = head[label_match.end():]
+        stop = re.search(stop_pattern, rest)
+        block = rest[: stop.start()] if stop else rest[:1200]
+        cleaned = clean_source_synopsis(' '.join(strip_front_matter_lines(block)))
+        if cleaned:
+            return {'summary': cleaned, 'source': 'explicit_label'}
+
+    first_heading = re.search(stop_pattern, head)
+    if first_heading and first_heading.start() > 60:
+        prefix = head[: first_heading.start()]
+        if not re.search(r'(?im)^\s*(?:序|自序|前言|后记|後記|作者序|阿达日记)\s*$', prefix):
+            cleaned = clean_source_synopsis(' '.join(strip_front_matter_lines(prefix)))
+            if cleaned:
+                return {'summary': cleaned, 'source': 'front_blurb'}
+    return {'summary': '', 'source': ''}
 
 
 def build_prompt(
@@ -260,6 +403,7 @@ def build_prompt(
     strategy: str,
     text_char_count: int,
     source_char_count: int,
+    source_synopsis: str,
 ) -> list[dict[str, str]]:
     system = (
         '你是中文小说书单策展助手。请输出严格 JSON，不要 markdown，不要解释，不要思考过程。'
@@ -277,17 +421,18 @@ def build_prompt(
         'analysis_strategy': strategy,
         'text_char_count': text_char_count,
         'source_char_count': source_char_count,
+        'source_synopsis': source_synopsis,
+        'summary_instruction': '如果 source_synopsis 非空，不要生成 summary/intro；只输出 primary_category、tags、scores、reason。',
         'anti_spoiler_rules': [
             '不要引用或复述结尾信息',
             '不要写“最后/最终/原来/真相是/结局是”等剧透式表述',
             '不要用“从A到B”总结关系终点，例如不要写“从互怼到心动”“从针锋相对到心意相通”',
             '不要确认最终恋爱结果，只能写暧昧、拉扯、试探、关系升温边缘',
+            '不要写怀孕、车祸、失忆、绑架、第三者、身世揭露等中后段具体情节',
             '如果片段包含重大转折，只用“关系出现转折”“冲突升级”等模糊描述',
             'summary 和 intro 面向未读者，必须像书店简介，不像剧情复盘',
         ],
         'required_schema': {
-            'summary': '40-120字的无剧透简介，只写设定、人物关系、核心冲突与氛围',
-            'intro': '40-90字的无剧透书架卡片介绍，不能揭露结局或重大反转',
             'primary_category': '从 allowed_primary_categories 中选 1 个',
             'tags': ['3到8个中文标签'],
             'scores': {
@@ -301,6 +446,12 @@ def build_prompt(
         },
         'content': analysis_text,
     }
+    if not source_synopsis:
+        user['required_schema'] = {
+            'summary': '40-120字的无剧透简介，只写设定、人物关系、核心冲突与氛围',
+            'intro': '40-90字的无剧透书架卡片介绍，不能揭露结局或重大反转',
+            **user['required_schema'],
+        }
     return [
         {'role': 'system', 'content': system},
         {'role': 'user', 'content': json.dumps(user, ensure_ascii=False)},
@@ -374,7 +525,15 @@ def sanitize_no_spoiler_text(value: str, limit: int) -> str:
     return clipped
 
 
-def normalize_result(raw: dict[str, object], title: str, author: str, relpath: str, categories: list[str], tags: list[str]) -> dict[str, object]:
+def normalize_result(
+    raw: dict[str, object],
+    title: str,
+    author: str,
+    relpath: str,
+    categories: list[str],
+    tags: list[str],
+    preset_summary: str = '',
+) -> dict[str, object]:
     if not raw:
         raw = fallback_payload(title, author, relpath, categories, tags)
     primary_category = str(raw.get('primary_category') or (categories[0] if categories else '都市言情'))
@@ -397,8 +556,8 @@ def normalize_result(raw: dict[str, object], title: str, author: str, relpath: s
     chemistry = clamp_score(scores.get('chemistry'), overall)
     spice = clamp_score(scores.get('spice'), overall)
     readability = clamp_score(scores.get('readability'), overall)
-    summary = sanitize_no_spoiler_text(str(raw.get('summary') or ''), 140)
-    intro = sanitize_no_spoiler_text(str(raw.get('intro') or ''), 100)
+    summary = sanitize_no_spoiler_text(preset_summary or str(raw.get('summary') or ''), 140)
+    intro = sanitize_no_spoiler_text(preset_summary or str(raw.get('intro') or ''), 100)
     if not summary:
         summary = fallback_payload(title, author, relpath, categories, tags)['summary']
     if not intro:
@@ -425,13 +584,14 @@ def call_model(
     token: str,
     messages: list[dict[str, str]],
     timeout: int,
+    max_tokens: int,
 ) -> tuple[dict[str, object], dict[str, object]]:
     if not token:
         raise RuntimeError('AI token is required by the configured endpoint.')
     payload = {
         'model': model,
         'temperature': 0.1,
-        'max_tokens': 700,
+        'max_tokens': max_tokens,
         'response_format': {'type': 'json_object'},
         'chat_template_kwargs': {'enable_thinking': False},
         'messages': messages,
@@ -457,16 +617,20 @@ def score_work(
     whole_char_limit: int,
     spread_chunk_count: int,
     spread_chunk_char_limit: int,
+    sample_profile: str = 'focused',
 ) -> dict[str, object]:
     available_models = fetch_models(url, token, timeout)
     resolved_model = resolve_model_name(model, available_models)
     text, _encoding = load_work_text(file_path, relpath)
+    source_synopsis_payload = extract_source_synopsis(text)
+    source_synopsis = str(source_synopsis_payload.get('summary') or '')
     strategy, analysis_text, source_char_count = build_analysis_payload(
         text,
         mode,
         whole_char_limit,
         spread_chunk_count,
         spread_chunk_char_limit,
+        sample_profile,
     )
     messages = build_prompt(
         title,
@@ -478,11 +642,12 @@ def score_work(
         strategy,
         len(text),
         source_char_count,
+        source_synopsis,
     )
     start = time.time()
-    raw_result, raw_response = call_model(url, resolved_model, token, messages, timeout)
+    raw_result, raw_response = call_model(url, resolved_model, token, messages, timeout, 430 if source_synopsis else 620)
     elapsed = round(time.time() - start, 2)
-    result = normalize_result(raw_result, title, author, relpath, categories, tags)
+    result = normalize_result(raw_result, title, author, relpath, categories, tags, source_synopsis)
     return {
         'ok': True,
         'result': result,
@@ -490,8 +655,13 @@ def score_work(
             'resolved_model': resolved_model,
             'available_models': available_models,
             'strategy': strategy,
+            'sample_profile': sample_profile,
             'text_char_count': len(text),
             'source_char_count': source_char_count,
+            'has_source_synopsis': bool(source_synopsis),
+            'summary_source': 'source_synopsis' if source_synopsis else 'ai_generated',
+            'source_synopsis_source': source_synopsis_payload.get('source') or '',
+            'source_synopsis_char_count': len(source_synopsis),
             'elapsed_sec': elapsed,
             'has_reasoning_content': bool(((raw_response.get('choices') or [{}])[0]).get('message', {}).get('reasoning_content')),
         },
@@ -529,6 +699,7 @@ def main() -> int:
             whole_char_limit=args.whole_char_limit,
             spread_chunk_count=args.spread_chunk_count,
             spread_chunk_char_limit=args.spread_chunk_char_limit,
+            sample_profile=args.sample_profile,
         )
     except Exception as exc:
         fallback = normalize_result(fallback_payload(title, author, relpath, categories, tags), title, author, relpath, categories, tags)

@@ -39,6 +39,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--whole-char-limit', type=int, default=DEFAULT_WHOLE_CHAR_LIMIT, help='Whole-text strategy limit')
     parser.add_argument('--spread-chunk-count', type=int, default=DEFAULT_SPREAD_CHUNK_COUNT, help='Spread strategy chunk count')
     parser.add_argument('--spread-chunk-char-limit', type=int, default=DEFAULT_SPREAD_CHUNK_CHAR_LIMIT, help='Spread strategy chunk size')
+    parser.add_argument('--sample-profile', choices=('focused', 'segmented', 'weighted'), default='focused', help='Spread sampling profile')
     parser.add_argument('--timeout', type=int, default=120, help='Network timeout in seconds')
     parser.add_argument('--retry-count', type=int, default=2, help='Retry count for a single work after the first attempt fails')
     parser.add_argument('--retry-backoff-sec', type=float, default=2.5, help='Delay between retries')
@@ -122,8 +123,13 @@ def build_metrics(payload: dict[str, object], args: argparse.Namespace) -> dict[
             'analysis_preset': args.quality_preset or args.quality_tier,
             'analysis_quality_note': args.quality_note,
             'analysis_strategy': meta.get('strategy'),
+            'analysis_sample_profile': meta.get('sample_profile'),
             'analysis_source_char_count': meta.get('source_char_count'),
             'analysis_text_char_count': meta.get('text_char_count'),
+            'analysis_summary_source': meta.get('summary_source') or '',
+            'analysis_has_source_synopsis': bool(meta.get('has_source_synopsis')),
+            'analysis_source_synopsis_source': meta.get('source_synopsis_source') or '',
+            'analysis_source_synopsis_char_count': meta.get('source_synopsis_char_count') or 0,
             'analysis_elapsed_sec': meta.get('elapsed_sec'),
             'analysis_scored_by': meta.get('resolved_model') or '',
             'analysis_has_reasoning_content': bool(meta.get('has_reasoning_content')),
@@ -259,6 +265,7 @@ def main() -> int:
                         whole_char_limit=args.whole_char_limit,
                         spread_chunk_count=args.spread_chunk_count,
                         spread_chunk_char_limit=args.spread_chunk_char_limit,
+                        sample_profile=args.sample_profile,
                     )
                     break
                 except Exception as exc:
