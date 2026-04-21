@@ -338,14 +338,26 @@ def sha256_text(value: str) -> str:
 
 
 def hash_password(password: str) -> str:
-    digest = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), b'web_app_hub_password', 200_000)
-    return f'pbkdf2_sha256${digest.hex()}'
+    iterations = 200_000
+    salt = os.urandom(16).hex()
+    digest = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), bytes.fromhex(salt), iterations).hex()
+    return f'pbkdf2_sha256${iterations}${salt}${digest}'
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    if password_hash.startswith('pbkdf2_sha256$'):
-        return hmac.compare_digest(hash_password(password), password_hash)
-    return hmac.compare_digest(sha256_text(password), password_hash)
+    if not password_hash.startswith('pbkdf2_sha256$'):
+        return False
+    parts = password_hash.split('$')
+    if len(parts) != 4:
+        return False
+    _alg, rounds_raw, salt_hex, stored_digest = parts
+    try:
+        rounds = int(rounds_raw)
+        salt = bytes.fromhex(salt_hex)
+    except ValueError:
+        return False
+    digest = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, rounds).hex()
+    return hmac.compare_digest(digest, stored_digest)
 
 
 def safe_json_loads(raw: str | None, default):
