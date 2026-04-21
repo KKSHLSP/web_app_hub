@@ -17,6 +17,7 @@ data/reader_ai_records/
 data/reader_ai_runs/
 data/reader_synopsis_reports/
 data/reader_tag_reports/
+data/reader_score_exports/
 
 # local book corpus and generated source lists
 writer/

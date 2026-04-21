@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from reader_core import BASE_DIR, normalize_reader_tags, safe_json_loads
+from reader_score_schema import normalize_score_metrics
 
 
 DATA_DIR = BASE_DIR / 'data'
@@ -63,6 +64,7 @@ def update_row(conn: sqlite3.Connection, row: sqlite3.Row, normalized_tags: list
     metrics = safe_json_loads(row['ai_metrics_json'], {})
     if not isinstance(metrics, dict):
         metrics = {}
+    metrics = normalize_score_metrics(metrics)
     metrics['analysis_tags_normalized_at'] = now_iso()
     metrics['analysis_tags_vocabulary'] = 'reader-v1'
     conn.execute(

@@ -1103,6 +1103,10 @@ def row_to_work_dict(row: sqlite3.Row) -> dict[str, object]:
     categories = safe_json_loads(row['categories_json'], [])
     tags = normalize_reader_tags(safe_json_loads(row['tags_json'], []), categories, max_tags=10)
     ai_metrics = safe_json_loads(row['ai_metrics_json'], {})
+    if not isinstance(ai_metrics, dict):
+        ai_metrics = {}
+    ai_metrics.setdefault('analysis_schema_version', 'reader-score-v1')
+    ai_metrics.setdefault('analysis_tags_vocabulary', 'reader-v1')
     base_score = row['ai_score'] if row['ai_score'] is not None else row['heuristic_score']
     total_opens = row['total_opens'] if 'total_opens' in row.keys() else 0
     popularity = round(min(100.0, float(total_opens or 0) * 9.0), 1)
@@ -1120,6 +1124,8 @@ def row_to_work_dict(row: sqlite3.Row) -> dict[str, object]:
         'ai_score': row['ai_score'],
         'score': round(float(base_score or 0), 1),
         'ai_metrics': ai_metrics,
+        'score_schema_version': ai_metrics.get('analysis_schema_version') or 'reader-score-v1',
+        'tag_vocabulary': ai_metrics.get('analysis_tags_vocabulary') or 'reader-v1',
         'ai_reason': row['ai_reason'] or '',
         'ai_status': row['ai_status'],
         'ai_model': row['ai_model'] or '',
