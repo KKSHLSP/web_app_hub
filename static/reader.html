@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>私密閱讀系統</title>
+  <title>辰趣閣</title>
   <style>
     :root {
       --bg:#1f1511;
@@ -51,11 +51,7 @@
       padding:18px 16px 0;
     }
     .topbar {
-      position:sticky;
-      top:0;
-      z-index:20;
       padding:14px 0 10px;
-      backdrop-filter:blur(14px);
     }
     .hero {
       background:linear-gradient(140deg, rgba(255,248,242,.86), rgba(242,220,204,.9));
@@ -121,10 +117,10 @@
     }
     .stat .k { font-size:12px; color:var(--ink-soft); }
     .stat .v { margin-top:4px; font-weight:800; font-size:20px; }
-    .tag-strip {
+    .tag-grid {
       display:flex;
+      flex-wrap:wrap;
       gap:8px;
-      overflow:auto;
       padding-bottom:4px;
     }
     .tag-chip {
@@ -238,9 +234,6 @@
       overflow:hidden;
     }
     .content-head {
-      position:sticky;
-      top:0;
-      z-index:2;
       display:flex;
       justify-content:space-between;
       gap:10px;
@@ -250,11 +243,13 @@
       border-bottom:1px solid rgba(93,61,47,.08);
       backdrop-filter:blur(10px);
     }
+    .detail-link { display:inline-flex; margin-top:12px; padding:8px 12px; border-radius:999px; background:#fffaf5; border:1px solid rgba(93,61,47,.12); color:var(--ink-soft); }
     .reader-scroll {
-      max-height:calc(100vh - 280px);
-      overflow:auto;
+      max-height:none;
+      overflow:visible;
       padding:20px 18px 26px;
       scroll-behavior:smooth;
+      width:100%;
     }
     .reader-scroll p {
       margin:0 0 16px;
@@ -262,6 +257,11 @@
       font-size:var(--reader-size, 19px);
       line-height:var(--reader-line-height, 1.9);
       letter-spacing:.02em;
+      width:100%;
+      max-width:100%;
+      overflow-wrap:anywhere;
+      word-break:break-word;
+      white-space:pre-wrap;
     }
     .related-list {
       display:flex;
@@ -293,6 +293,7 @@
       background:rgba(31,21,17,.55);
       backdrop-filter:blur(10px);
     }
+    .detail-link { display:inline-flex; margin-top:12px; padding:8px 12px; border-radius:999px; background:#fffaf5; border:1px solid rgba(93,61,47,.12); color:var(--ink-soft); }
     .gate {
       width:min(480px, 100%);
       background:linear-gradient(180deg, rgba(255,252,248,.98), rgba(243,229,214,.98));
@@ -308,17 +309,20 @@
     @media (max-width: 980px) {
       .layout { grid-template-columns:1fr; }
       .catalog-list { max-height:none; }
-      .reader-scroll { max-height:60vh; }
+      .reader-scroll { max-height:none; }
       .score-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
       .stats { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+      .detail-head { position:static; }
     }
     @media (max-width: 600px) {
       .shell { padding:12px 12px 0; }
       .hero, .detail-head, .detail-body, .catalog-head, .panel-inner { padding:14px; }
       .stats { grid-template-columns:1fr 1fr; }
       .score-grid { grid-template-columns:1fr 1fr; }
-      .reader-scroll { padding:16px 14px 24px; }
+      .reader-scroll { padding:16px 14px 24px; overflow-x:hidden; }
       .reader-scroll p { font-size:var(--reader-size, 18px); }
+      .content-box, .summary-box, .score-box, .related-box { overflow:hidden; }
+      .title-line { align-items:flex-start; }
     }
   </style>
 </head>
@@ -326,10 +330,10 @@
   <div id="gateOverlay" class="overlay">
     <div class="gate">
       <p><a href="/">← 返回合集首頁</a></p>
-      <h2>私密閱讀系統</h2>
+      <h2>辰趣閣</h2>
       <p class="subtle">這個入口獨立於另外兩個 app，需要額外密碼。預設已適配手機瀏覽器，正文為滑動閱讀。</p>
       <div style="display:grid; gap:12px;">
-        <input id="readerPassword" type="password" placeholder="輸入閱讀系統密碼" />
+        <input id="readerPassword" type="password" placeholder="輸入辰趣閣密碼（只輸入數字即可）" />
         <button class="btn-accent" id="unlockBtn">解鎖閱讀庫</button>
         <div class="status-line" id="gateStatus"></div>
       </div>
@@ -342,18 +346,18 @@
         <div class="hero-head">
           <div>
             <p><a href="/">← 返回合集首頁</a></p>
-            <h1 style="margin:0 0 8px; font-size:clamp(28px, 5vw, 42px);">私密閱讀系統</h1>
-            <p class="subtle" style="margin:0;">支持搜索、標籤契合度、關聯度、作品評分排序，並可調用本地 AI 補摘要與打分。</p>
+            <h1 style="margin:0 0 8px; font-size:clamp(28px, 5vw, 42px);">辰趣閣</h1>
+            <p class="subtle" style="margin:0;">支持搜索、標籤推薦與手機閱讀。</p>
           </div>
           <div class="badge-row">
             <div class="badge" id="userBadge">未選使用者</div>
-            <div class="badge" id="readerBadge">閱讀入口未解鎖</div>
+            
           </div>
         </div>
         <div class="actions" style="margin-top:14px;">
-          <button class="btn-accent" id="reindexBtn">重掃作品庫</button>
-          <button class="btn-secondary" id="batchAiBtn">批量補 8 本 AI 評分</button>
-          <button class="btn-secondary" id="refreshBtn">刷新列表</button>
+          
+          
+          
           <a class="badge" href="/settings">閱讀設定</a>
         </div>
       </section>
@@ -374,7 +378,7 @@
               <option value="latest">最近更新</option>
             </select>
           </div>
-          <div class="tag-strip" id="tagStrip"></div>
+          <div class="tag-grid" id="tagStrip"></div>
           <div class="stats">
             <div class="stat"><div class="k">作品總數</div><div class="v" id="worksCount">0</div></div>
             <div class="stat"><div class="k">作者數</div><div class="v" id="authorsCount">0</div></div>
@@ -407,7 +411,6 @@
               </div>
             </div>
             <div class="actions" style="margin-top:14px;">
-              <button class="btn-accent" id="refreshAiBtn">刷新本書 AI 評分</button>
               <button class="btn-secondary" id="jumpContinueBtn">回到上次位置</button>
             </div>
           </section>
@@ -462,11 +465,13 @@
       content: null,
       fontSize: Number(localStorage.getItem('reader_font_size') || 19),
       saveTimer: null,
+      contentCache: new Map(),
+      openingWorkId: null,
+      hasOpenedProgressSaved: false,
     };
 
     const gateOverlay = document.getElementById('gateOverlay');
     const gateStatus = document.getElementById('gateStatus');
-    const readerBadge = document.getElementById('readerBadge');
     const userBadge = document.getElementById('userBadge');
     const tagStrip = document.getElementById('tagStrip');
     const catalogList = document.getElementById('catalogList');
@@ -482,7 +487,6 @@
 
     function setReaderReady(ready) {
       gateOverlay.style.display = ready ? 'none' : 'flex';
-      readerBadge.textContent = ready ? '閱讀入口已解鎖' : '閱讀入口未解鎖';
     }
 
     async function api(url, options = {}) {
@@ -547,6 +551,7 @@
           </div>
           <h3>${escapeHtml(work.title)}</h3>
           <p class="subtle" style="margin:0;">${escapeHtml(work.intro || work.summary || work.excerpt || '暫無簡介')}</p>
+          <span class="detail-link">進入作品頁</span>
           <div class="meta-line" style="margin-top:10px;">
             <span>契合 ${Number(work.tag_fit_score || 0).toFixed(0)}</span>
             <span>關聯 ${Number(work.relation_score || 0).toFixed(0)}</span>
@@ -669,20 +674,33 @@
     }
 
     async function openWork(id, scrollIntoView) {
-      const params = new URLSearchParams({
-        id: String(id),
-        user_id: String(state.user?.id || 0),
-      });
-      const data = await api(`/api/reader/work?${params.toString()}`);
-      renderDetail(data.work, data.related || []);
-      const content = await api(`/api/reader/content?id=${id}`);
-      renderContent(content.content, Number(data.work.last_scroll || 0));
-      await saveProgress(true);
-      if (scrollIntoView && window.innerWidth < 980) detailBody.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (state.openingWorkId === id) return;
+      state.openingWorkId = id;
+      try {
+        const params = new URLSearchParams({
+          id: String(id),
+          user_id: String(state.user?.id || 0),
+        });
+        const workPromise = api(`/api/reader/work?${params.toString()}`);
+        const cachedContent = state.contentCache.get(id);
+        const contentPromise = cachedContent ? Promise.resolve({ content: cachedContent }) : api(`/api/reader/content?id=${id}`);
+        const [data, content] = await Promise.all([workPromise, contentPromise]);
+        renderDetail(data.work, data.related || []);
+        if (!cachedContent && content?.content) state.contentCache.set(id, content.content);
+        renderContent(content.content, Number(data.work.last_scroll || 0));
+        state.hasOpenedProgressSaved = false;
+        if (scrollIntoView && window.innerWidth < 980) detailBody.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } finally {
+        state.openingWorkId = null;
+      }
     }
 
     async function saveProgress(opened = false) {
       if (!state.currentWork || !state.user) return;
+      if (opened) {
+        if (state.hasOpenedProgressSaved) return;
+        state.hasOpenedProgressSaved = true;
+      }
       const scrollHeight = readerScroll.scrollHeight - readerScroll.clientHeight;
       const progress = scrollHeight > 0 ? (readerScroll.scrollTop / scrollHeight) * 100 : 0;
       document.getElementById('progressBar').style.width = `${Math.max(progress, Number(state.currentWork.progress || 0))}%`;
@@ -701,7 +719,7 @@
 
     function queueProgressSave() {
       clearTimeout(state.saveTimer);
-      state.saveTimer = setTimeout(() => saveProgress(false).catch(() => {}), 350);
+      state.saveTimer = setTimeout(() => saveProgress(false).catch(() => {}), 900);
     }
 
     async function refreshCurrentAi() {
@@ -738,7 +756,7 @@
     }
 
     function updateFont(delta) {
-      state.fontSize = Math.max(16, Math.min(24, state.fontSize + delta));
+      state.fontSize = Math.max(16, Math.min(28, state.fontSize + delta));
       localStorage.setItem('reader_font_size', String(state.fontSize));
       document.documentElement.style.setProperty('--reader-size', `${state.fontSize}px`);
     }
@@ -750,7 +768,6 @@
     document.getElementById('refreshBtn').onclick = () => loadWorks().catch(error => alert(error.message));
     document.getElementById('batchAiBtn').onclick = () => batchRefreshAi().catch(error => alert(error.message));
     document.getElementById('reindexBtn').onclick = () => reindexLibrary().catch(error => alert(error.message));
-    document.getElementById('refreshAiBtn').onclick = () => refreshCurrentAi().catch(error => alert(error.message));
     document.getElementById('jumpContinueBtn').onclick = () => {
       if (!state.currentWork) return;
       readerScroll.scrollTop = Number(state.currentWork.last_scroll || 0);
