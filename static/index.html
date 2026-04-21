@@ -44,7 +44,7 @@
           <h3>新增用戶</h3>
           <div style="display:grid; gap:10px; max-width:420px;">
             <input id="newUserName" placeholder="用戶名稱" />
-            <input id="newUserBirthday" type="date" />
+            <input id="newUserBirthday" inputmode="numeric" maxlength="10" placeholder="YYYY/MM/DD" />
             <input id="newUserPassword" type="password" placeholder="可留空＝不設密碼" />
             <div><button class="primary" id="createUserBtn">建立</button></div>
           </div>
@@ -68,6 +68,19 @@
     }
     function loadSelectedUser(){
       try { return JSON.parse(localStorage.getItem('hub_selected_user') || 'null'); } catch { return null; }
+    }
+
+    function formatDateDigits(digits) {
+      let value = digits.replace(/\D/g, '').slice(0, 8);
+      if (value.length > 4) value = `${value.slice(0, 4)}/${value.slice(4)}`;
+      if (value.length > 7) value = `${value.slice(0, 7)}/${value.slice(7, 9)}`;
+      return value;
+    }
+
+    function attachDateMask(input) {
+      input.addEventListener('input', event => {
+        event.target.value = formatDateDigits(event.target.value);
+      });
     }
 
     async function loadUsers(){
@@ -162,6 +175,7 @@
       box.style.display = box.style.display === 'none' ? 'block' : 'none';
     };
     document.getElementById('createUserBtn').onclick = createUser;
+    attachDateMask(document.getElementById('newUserBirthday'));
 
     loadUsers();
     loadApps();

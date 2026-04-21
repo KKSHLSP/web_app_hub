@@ -41,6 +41,8 @@ SAVE_RATE = {}
 READER_AUTH_RATE = {}
 READER_TOKENS = {}
 READER_INDEX_READY = False
+READER_FACETS_CACHE_TTL_SEC = 30
+READER_FACETS_CACHE = {'expires_at': 0.0, 'payload': None}
 READER_SYNC_LOCK = Lock()
 READER_TOKEN_LOCK = Lock()
 
@@ -97,6 +99,28 @@ def validate_reader_token(token: str) -> bool:
             return False
         meta['expires_at'] = time.time() + READER_SESSION_TTL_SEC
     return True
+
+
+def password_date_variants(password: str) -> list[str]:
+    raw = str(password or '').strip()
+    compact = ''.join(ch for ch in raw if ch.isdigit())
+    variants = [raw]
+    if '/' in raw and compact:
+        variants.append(compact)
+    if len(compact) == 8:
+        variants.append(f'{compact[:4]}/{compact[4:6]}/{compact[6:8]}')
+        variants.append(f'{compact[:4]}-{compact[4:6]}-{compact[6:8]}')
+    deduped = []
+    seen = set()
+    for item in variants:
+        if item and item not in seen:
+            seen.add(item)
+            deduped.append(item)
+    return deduped
+
+
+def verify_date_masked_password(password: str, password_hash: str) -> bool:
+    return any(verify_password(variant, password_hash) for variant in password_date_variants(password))
 
 
 def ensure_schema():
@@ -187,7 +211,7 @@ def ensure_schema():
 
 
 def ensure_reader_index_ready(force=False):
-    global READER_INDEX_READY
+    global READER_INDEX_READY, READER_FACETS_CACHE
     if READER_INDEX_READY and not force:
         return {'added': 0, 'updated': 0, 'removed': 0, 'failed': 0}
     with READER_SYNC_LOCK:
@@ -198,6 +222,7 @@ def ensure_reader_index_ready(force=False):
         conn.commit()
         conn.close()
         READER_INDEX_READY = True
+        READER_FACETS_CACHE = {'expires_at': 0.0, 'payload': None}
         return summary
 
 
@@ -274,6 +299,9 @@ def build_reader_catalog(conn, user_id, query='', selected_tags=None, sort='reco
 
 
 def get_reader_facets(conn):
+    cached = READER_FACETS_CACHE.get('payload')
+    if cached is not None and time.time() < float(READER_FACETS_CACHE.get('expires_at') or 0):
+        return cached
     rows = conn.execute('SELECT author, tags_json, categories_json FROM reader_works').fetchall()
     authors = {row['author'] for row in rows}
     counter = Counter()
@@ -282,11 +310,14 @@ def get_reader_facets(conn):
         for tag in normalize_reader_tags(safe_json_loads(row['tags_json'], []), categories, max_tags=10):
             counter[tag] += 1
     tags = [{'name': name, 'count': count} for name, count in counter.most_common(30)]
-    return {
+    payload = {
         'totalWorks': conn.execute('SELECT COUNT(*) AS total FROM reader_works').fetchone()['total'],
         'totalAuthors': len(authors),
         'tags': tags,
     }
+    READER_FACETS_CACHE['payload'] = payload
+    READER_FACETS_CACHE['expires_at'] = time.time() + READER_FACETS_CACHE_TTL_SEC
+    return payload
 
 
 def current_reader_settings():
@@ -667,7 +698,7 @@ class Handler(SimpleHTTPRequestHandler):
             if limited:
                 return self._json({'error': f'閱讀入口驗證過於頻繁，請 {retry} 秒後再試'}, 429)
             settings = current_reader_settings()
-            if not verify_password(password, settings['reader_password_hash']):
+            if not verify_date_masked_password(password, settings['reader_password_hash']):
                 return self._json({'ok': False, 'error': '閱讀系統密碼不正確'}, 401)
             return self._json({'ok': True, 'token': issue_reader_token(), 'ttl_sec': READER_SESSION_TTL_SEC})
 

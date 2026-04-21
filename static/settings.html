@@ -40,7 +40,7 @@
         <p class="subtle">修改普通使用者的生日與密碼。密碼留空代表取消密碼。</p>
         <div class="stack">
           <select id="userSelect"></select>
-          <input id="birthday" type="date" />
+          <input id="birthday" inputmode="numeric" maxlength="10" placeholder="YYYY/MM/DD" />
           <input id="password" type="password" placeholder="新密碼，可留空" />
           <button class="primary" id="saveBtn">保存帳戶設定</button>
           <div class="line" id="userLine"></div>
@@ -51,7 +51,7 @@
         <h2>閱讀系統設定</h2>
         <p class="subtle">這一區控制新增的私密閱讀系統，包括獨立入口密碼，以及本地 AI 的 URL / 模型 / Token。</p>
         <div class="stack">
-          <input id="readerPassword" type="password" placeholder="新的閱讀系統密碼，不填則不改" />
+          <input id="readerPassword" type="text" inputmode="numeric" autocomplete="new-password" maxlength="32" placeholder="新的閱讀系統密碼；生日可只輸入數字" />
           <input id="readerAiUrl" placeholder="OpenAI-compatible URL，例如 http://127.0.0.1:8000/v1" />
           <input id="readerAiModel" placeholder="模型名，例如 Qwen3.6-35B-A3B-4bit" />
           <input id="readerAiToken" type="password" placeholder="本地 AI API key / Bearer token，可留空清除" />
@@ -63,6 +63,27 @@
   </div>
   <script>
     let users = [];
+
+    function formatDateDigits(digits) {
+      let value = digits.replace(/\D/g, '').slice(0, 8);
+      if (value.length > 4) value = `${value.slice(0, 4)}/${value.slice(4)}`;
+      if (value.length > 7) value = `${value.slice(0, 7)}/${value.slice(7, 9)}`;
+      return value;
+    }
+
+    function attachDateMask(input) {
+      input.addEventListener('input', event => {
+        event.target.value = formatDateDigits(event.target.value);
+      });
+    }
+
+    function attachSmartDateMask(input) {
+      input.addEventListener('input', event => {
+        const raw = event.target.value;
+        if (/[^0-9/\s]/.test(raw)) return;
+        event.target.value = formatDateDigits(raw);
+      });
+    }
 
     async function loadUsers() {
       const data = await fetch('/api/users').then(r => r.json());
@@ -81,7 +102,7 @@
     function fillUser() {
       const id = Number(document.getElementById('userSelect').value || 0);
       const user = users.find(item => item.id === id);
-      document.getElementById('birthday').value = user?.birthday || '';
+      document.getElementById('birthday').value = user?.birthday ? formatDateDigits(user.birthday) : '';
       document.getElementById('userLine').textContent = user ? `正在編輯：${user.name}` : '';
     }
 
@@ -110,7 +131,7 @@
 
     async function saveReaderSettings() {
       const payload = {
-        password: document.getElementById('readerPassword').value,
+        password: document.getElementById('readerPassword').value.trim(),
         ai_url: document.getElementById('readerAiUrl').value.trim(),
         ai_model: document.getElementById('readerAiModel').value.trim(),
         ai_token: document.getElementById('readerAiToken').value.trim(),
@@ -130,6 +151,8 @@
     document.getElementById('userSelect').onchange = fillUser;
     document.getElementById('saveBtn').onclick = saveUser;
     document.getElementById('saveReaderBtn').onclick = saveReaderSettings;
+    attachDateMask(document.getElementById('birthday'));
+    attachSmartDateMask(document.getElementById('readerPassword'));
 
     loadUsers();
     loadReaderSettings();
