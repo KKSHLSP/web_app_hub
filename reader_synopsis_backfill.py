@@ -8,6 +8,7 @@ from pathlib import Path
 
 from reader_ai import INTRO_MAX_CHARS, extract_source_synopsis, sanitize_no_spoiler_text
 from reader_core import BASE_DIR, load_work_text_from_relpath, safe_json_loads
+from reader_score_schema import normalize_score_metrics
 
 
 DATA_DIR = BASE_DIR / 'data'
@@ -62,6 +63,7 @@ def update_row(conn: sqlite3.Connection, row: sqlite3.Row, source_summary: str, 
     metrics = safe_json_loads(row['ai_metrics_json'], {})
     if not isinstance(metrics, dict):
         metrics = {}
+    metrics = normalize_score_metrics(metrics)
     metrics['analysis_summary_source'] = 'source_synopsis'
     metrics['analysis_has_source_synopsis'] = True
     metrics['analysis_source_synopsis_source'] = source_kind

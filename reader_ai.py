@@ -24,6 +24,7 @@ from reader_core import (
     safe_json_loads,
     split_paragraphs,
 )
+from reader_score_schema import READER_SCORE_KEYS, READER_SCORE_SCHEMA_VERSION, READER_TAG_VOCABULARY_VERSION
 
 ALLOWED_PRIMARY_CATEGORIES = [
     '虐文',
@@ -663,6 +664,9 @@ def score_work(
         'ok': True,
         'result': result,
         'meta': {
+            'schema_version': READER_SCORE_SCHEMA_VERSION,
+            'tags_vocabulary': READER_TAG_VOCABULARY_VERSION,
+            'score_keys': list(READER_SCORE_KEYS),
             'resolved_model': resolved_model,
             'available_models': available_models,
             'strategy': strategy,

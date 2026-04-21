@@ -27,6 +27,12 @@ reader_synopsis_backfill.py
 reader_tag_normalize.py
   標籤收斂腳本：把舊資料與 AI 自由輸出的 tag 正規化到固定詞表。
 
+reader_score_schema.py
+  穩定評分 JSON schema：定義 reader-score-v1、score keys、tag vocabulary 與驗證函式。
+
+reader_score_export.py
+  評分 JSON 匯出/驗證工具：把 DB 轉成可接入伺服器或其他系統的 JSONL/JSON。
+
 launch_reader_ai_batch.sh
   macOS 後台啟動器：用 screen + caffeinate 長時間跑批處理，避免電腦休眠。
 
@@ -87,7 +93,22 @@ static/settings.html
 - 若原文開頭已有 `內容簡介`、`作品簡介`、`文案` 等簡介欄，Python 會先清洗並直接寫入較長的 `summary`，再裁出較短的 `intro`；模型只輸出分類、標籤、評分與推薦理由。
 - 若沒有原文簡介，模型才生成無劇透 `summary` / `intro`。`summary` 面向詳情頁，目標約 `120-220` 字；`intro` 面向列表卡片，目標約 `55-100` 字。
 - prompt 會提供固定 `allowed_tags`，模型只能從白名單選 tag；落庫前還會做一次 Python 歸一化。
-- 生成後寫入 `analysis_quality=low`、`analysis_sample_profile=weighted`、`analysis_summary_source`、`analysis_tags_vocabulary`，之後可專門重跑低質量結果。
+- 生成後寫入 `analysis_schema_version=reader-score-v1`、`analysis_quality=low`、`analysis_sample_profile=weighted`、`analysis_summary_source`、`analysis_tags_vocabulary`，之後可專門重跑低質量結果。
+
+評分 JSON 接入格式：
+
+```bash
+python3 reader_score_export.py --status done --validate-only
+python3 reader_score_export.py --status done --format jsonl
+```
+
+- `schema_version` 固定為 `reader-score-v1`。
+- `work`：作品 id、路徑、標題、作者、字數、章節數。
+- `display`：`summary`、`intro`、`excerpt`。
+- `classification`：主分類、分類列表、固定詞表 tag、tag 詞表版本。
+- `scores`：`overall`、`emotion`、`chemistry`、`spice`、`readability`，全部為 `0-100` 整數。
+- `recommendation`：推薦理由、質量標記、preset、簡介來源。
+- `analysis`：模型、打分時間、取樣策略、輸入字數、是否使用原文簡介、耗時等元資料。
 
 固定 tag：
 

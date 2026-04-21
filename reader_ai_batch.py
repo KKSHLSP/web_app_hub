@@ -14,6 +14,7 @@ from reader_ai import (
     score_work,
 )
 from reader_core import BASE_DIR, get_reader_settings, safe_json_loads
+from reader_score_schema import normalize_score_metrics
 
 DATA_DIR = BASE_DIR / 'data'
 DB_PATH = DATA_DIR / 'hub.db'
@@ -135,7 +136,7 @@ def build_metrics(payload: dict[str, object], args: argparse.Namespace) -> dict[
             'analysis_has_reasoning_content': bool(meta.get('has_reasoning_content')),
         }
     )
-    return scores
+    return normalize_score_metrics(scores)
 
 
 def update_row(conn: sqlite3.Connection, row: sqlite3.Row, payload: dict[str, object], args: argparse.Namespace) -> None:

@@ -124,7 +124,20 @@ Token/API key: 在 /settings 補入
 - 長文使用 `weighted` 取樣：開頭少量、中段更多、高潮前段少量，避開真正結尾。
 - 若原文開頭已有 `內容簡介`、`作品簡介`、`文案`，Python 會先清洗並直接用作長簡介，模型只生成分類、標籤、評分與推薦理由。
 - 若沒有原文簡介，模型生成一段較完整的無劇透詳情簡介和一段較短的卡片介紹。
-- 結果標記為 `analysis_quality=low`，之後可以按低質量批次重跑。
+- 結果使用穩定格式 `reader-score-v1`，並標記 `analysis_quality=low`，之後可以按低質量批次重跑。
+
+評分 JSON 接入格式：
+
+```bash
+python3 reader_score_export.py --status done --validate-only
+python3 reader_score_export.py --status done --format jsonl
+```
+
+- 匯出 schema 固定為 `reader-score-v1`。
+- 固定分數鍵：`overall`、`emotion`、`chemistry`、`spice`、`readability`。
+- 固定分類區塊：`classification.primary_category`、`classification.categories`、`classification.tags`、`classification.tag_vocabulary`。
+- 固定展示區塊：`display.summary` 是詳情頁長簡介，`display.intro` 是卡片短文案。
+- 固定分析區塊：`analysis.model`、`analysis.strategy`、`analysis.sample_profile`、`analysis.has_source_synopsis` 等批處理元資料。
 
 補高質量示例：
 
@@ -169,6 +182,8 @@ reader_ai.py
 reader_ai_batch.py
 reader_synopsis_backfill.py
 reader_tag_normalize.py
+reader_score_schema.py
+reader_score_export.py
 launch_reader_ai_batch.sh
 static/
 docs/
@@ -183,6 +198,7 @@ data/reader_ai_runs/
 data/reader_ai_records/
 data/reader_synopsis_reports/
 data/reader_tag_reports/
+data/reader_score_exports/
 writer/
 .env
 *.log
