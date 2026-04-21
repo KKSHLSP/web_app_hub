@@ -15,7 +15,7 @@ WRITER_DIR = BASE_DIR / 'writer'
 SUPPORTED_EXTENSIONS = {'.txt', '.epub'}
 SKIP_FILE_STEMS = {'content', 'contents', 'index', 'catalog', 'fail', '网址'}
 MIN_WORK_FILE_SIZE = 256
-DEFAULT_READER_PASSWORD = os.getenv('READER_APP_PASSWORD', 'reader888')
+DEFAULT_READER_PASSWORD = os.getenv('READER_APP_PASSWORD', '1996/12/25')
 DEFAULT_READER_AI_URL = os.getenv('READER_AI_URL', 'http://127.0.0.1:8000/v1')
 DEFAULT_READER_AI_MODEL = os.getenv('READER_AI_MODEL', 'Qwen3.6-35B-A3B-4bit')
 DEFAULT_READER_AI_TOKEN = os.getenv('READER_AI_TOKEN', '')
@@ -198,7 +198,12 @@ def count_cjk(text: str) -> int:
 
 
 def relpath_for(path: Path) -> str:
-    return path.resolve().relative_to(BASE_DIR).as_posix()
+    resolved = path.resolve()
+    writer_root = WRITER_DIR.resolve()
+    try:
+        return resolved.relative_to(writer_root).as_posix()
+    except ValueError:
+        return resolved.relative_to(BASE_DIR).as_posix()
 
 
 def should_skip_path(path: Path) -> bool:
@@ -805,7 +810,8 @@ def sync_reader_index(conn: sqlite3.Connection, rescan_all: bool = False) -> dic
 
 
 def load_work_text_from_relpath(relpath: str) -> tuple[str, str]:
-    path = BASE_DIR / relpath
+    writer_candidate = WRITER_DIR / relpath
+    path = writer_candidate if writer_candidate.exists() else (BASE_DIR / relpath)
     text, encoding = read_work_text(path)
     return sanitize_text(text), encoding
 
