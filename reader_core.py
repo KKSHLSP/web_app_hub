@@ -6,6 +6,7 @@ import json
 import os
 import re
 import sqlite3
+import hmac
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -55,6 +56,186 @@ READER_TAG_RULES = {
     '江湖武侠': ['剑', '侠', '江湖', '盟主', '堡主'],
     '悬疑灵异': ['灵异', '鬼', '异瞳', '怪谈', '暗夜', '死神'],
 }
+
+READER_TAG_VOCABULARY = [
+    '虐文',
+    '骨科文',
+    '黄文',
+    '甜宠',
+    '豪门总裁',
+    '青梅竹马',
+    '先婚后爱',
+    '替身追妻',
+    '强制爱',
+    '古言宫廷',
+    '古代言情',
+    '江湖武侠',
+    '穿越重生',
+    '校园青春',
+    '悬疑灵异',
+    '耽美百合',
+    '都市言情',
+    '禁忌关系',
+    '追妻火葬场',
+    '契约婚姻',
+    '替身文学',
+    '豪门恩怨',
+    '黑化复仇',
+    '年上',
+    '年下',
+    '年龄差',
+    '先虐后甜',
+    '双向拉扯',
+    '宫廷权谋',
+    '欢喜冤家',
+    '破镜重圆',
+    '久别重逢',
+    '暗恋成真',
+    '双向暗恋',
+    '日久生情',
+    '一见钟情',
+    '救赎治愈',
+    '相爱相杀',
+    '误会纠葛',
+    '身份悬殊',
+    '身份错位',
+    '女扮男装',
+    '失忆梗',
+    '身世之谜',
+    '带球跑',
+    '单亲家庭',
+    '复仇虐恋',
+    '权谋斗争',
+    '宫斗宅斗',
+    '职场恋情',
+    '娱乐圈',
+    '医生律师',
+    '异国恋',
+    '婚恋家庭',
+    '同居日常',
+    '轻松搞笑',
+    '温馨治愈',
+    '高干商战',
+    '黑帮情仇',
+    '奇幻玄幻',
+    '灵异悬疑',
+    '推理破案',
+    '民国年代',
+    '乡村田园',
+    '人外奇缘',
+    '师生恋',
+    '腹黑男主',
+    '强强',
+]
+
+READER_TAG_ALIASES = {
+    '黃文': '黄文',
+    '肉文': '黄文',
+    'H文': '黄文',
+    '高H': '黄文',
+    '情色': '黄文',
+    '骨科': '骨科文',
+    '兄妹恋': '骨科文',
+    '兄妹戀': '骨科文',
+    '虐恋': '虐文',
+    '虐恋情深': '虐文',
+    '虐心': '虐文',
+    '虐身虐心': '虐文',
+    '都市情感': '都市言情',
+    '都市情缘': '都市言情',
+    '现代言情': '都市言情',
+    '豪门世家': '豪门恩怨',
+    '豪门': '豪门恩怨',
+    '强取豪夺': '强制爱',
+    '强制恋爱': '强制爱',
+    '禁忌之恋': '禁忌关系',
+    '禁忌恋': '禁忌关系',
+    '暧昧拉扯': '双向拉扯',
+    '情感拉扯': '双向拉扯',
+    '情感博弈': '双向拉扯',
+    '甜虐交织': '先虐后甜',
+    '追妻': '追妻火葬场',
+    '火葬场': '追妻火葬场',
+    '契约关系': '契约婚姻',
+    '契约恋爱': '契约婚姻',
+    '替身梗': '替身文学',
+    '替身文': '替身文学',
+    '复仇': '黑化复仇',
+    '复仇爱情': '黑化复仇',
+    '权谋': '权谋斗争',
+    '宫廷权谋': '宫廷权谋',
+    '古言': '古代言情',
+    '古风': '古代言情',
+    '古代言情': '古代言情',
+    '悬疑': '悬疑灵异',
+    '悬疑推理': '推理破案',
+    '推理': '推理破案',
+    '灵异': '灵异悬疑',
+    '奇幻': '奇幻玄幻',
+    '玄幻': '奇幻玄幻',
+    '职场': '职场恋情',
+    '职场日常': '职场恋情',
+    '职场风云': '职场恋情',
+    '职场精英': '职场恋情',
+    '医生': '医生律师',
+    '律师': '医生律师',
+    '医生文': '医生律师',
+    '律师文': '医生律师',
+    '轻松幽默': '轻松搞笑',
+    '轻松': '轻松搞笑',
+    '搞笑': '轻松搞笑',
+    '治愈': '温馨治愈',
+    '温馨': '温馨治愈',
+    '温馨治愈': '温馨治愈',
+    '身份反差': '身份错位',
+    '身份差距': '身份悬殊',
+    '身份悬殊': '身份悬殊',
+    '身世': '身世之谜',
+    '身世之谜': '身世之谜',
+    '失忆': '失忆梗',
+    '失忆梗': '失忆梗',
+    '误会': '误会纠葛',
+    '误会重重': '误会纠葛',
+    '误会梗': '误会纠葛',
+    '单亲妈妈': '单亲家庭',
+    '单亲爸爸': '单亲家庭',
+    '单亲': '单亲家庭',
+    '婚后恋爱': '先婚后爱',
+    '闪婚': '先婚后爱',
+    '先婚后恋': '先婚后爱',
+    '欢喜冤家': '欢喜冤家',
+    '相爱相杀': '相爱相杀',
+    '破镜重圆': '破镜重圆',
+    '久别重逢': '久别重逢',
+    '双向奔赴': '救赎治愈',
+    '救赎': '救赎治愈',
+    '高干': '高干商战',
+    '商战': '高干商战',
+    '黑帮': '黑帮情仇',
+    '黑道': '黑帮情仇',
+}
+
+CATEGORY_TO_TAGS = {
+    '虐文': ['虐文'],
+    '骨科文': ['骨科文', '禁忌关系'],
+    '黄文': ['黄文'],
+    '甜宠': ['甜宠'],
+    '豪门总裁': ['豪门总裁', '豪门恩怨'],
+    '青梅竹马': ['青梅竹马'],
+    '先婚后爱': ['先婚后爱'],
+    '替身追妻': ['替身追妻', '替身文学', '追妻火葬场'],
+    '强制爱': ['强制爱'],
+    '古言宫廷': ['古言宫廷', '古代言情'],
+    '江湖武侠': ['江湖武侠'],
+    '穿越重生': ['穿越重生'],
+    '校园青春': ['校园青春'],
+    '悬疑灵异': ['悬疑灵异'],
+    '耽美百合': ['耽美百合'],
+    '都市言情': ['都市言情'],
+}
+
+CATEGORY_TAG_SET = set(READER_CATEGORY_RULES) | {'都市言情'}
+READER_TAG_SET = set(READER_TAG_VOCABULARY)
 
 CATEGORY_PRIORITY = [
     '虐文',
@@ -154,6 +335,29 @@ def utc_now_iso() -> str:
 
 def sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode('utf-8')).hexdigest()
+
+
+def hash_password(password: str) -> str:
+    iterations = 200_000
+    salt = os.urandom(16).hex()
+    digest = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), bytes.fromhex(salt), iterations).hex()
+    return f'pbkdf2_sha256${iterations}${salt}${digest}'
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    if not password_hash.startswith('pbkdf2_sha256$'):
+        return False
+    parts = password_hash.split('$')
+    if len(parts) != 4:
+        return False
+    _alg, rounds_raw, salt_hex, stored_digest = parts
+    try:
+        rounds = int(rounds_raw)
+        salt = bytes.fromhex(salt_hex)
+    except ValueError:
+        return False
+    digest = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, rounds).hex()
+    return hmac.compare_digest(digest, stored_digest)
 
 
 def safe_json_loads(raw: str | None, default):
@@ -537,6 +741,47 @@ def infer_categories(title: str, author: str, relpath: str, text: str) -> list[s
     return [name for name, _score in ordered[:6]]
 
 
+def normalize_reader_tag(tag: object) -> str:
+    raw = normalize_spaces(str(tag or ''))
+    if not raw:
+        return ''
+    raw = raw.strip(' #,，、/\\|;；:：[]【】()（）')
+    if not raw:
+        return ''
+    if raw in READER_TAG_SET:
+        return raw
+    alias = READER_TAG_ALIASES.get(raw)
+    if alias:
+        return alias
+    compact = re.sub(r'\s+', '', raw)
+    if compact in READER_TAG_SET:
+        return compact
+    alias = READER_TAG_ALIASES.get(compact)
+    if alias:
+        return alias
+    return ''
+
+
+def normalize_reader_tags(tags: list[object], categories: list[str] | None = None, max_tags: int = 8) -> list[str]:
+    normalized = []
+    seen = set()
+
+    def add(tag: object) -> None:
+        canonical = normalize_reader_tag(tag)
+        if canonical and canonical not in seen:
+            seen.add(canonical)
+            normalized.append(canonical)
+
+    for category in categories or []:
+        for tag in CATEGORY_TO_TAGS.get(str(category), [category]):
+            add(tag)
+    for tag in tags or []:
+        add(tag)
+    if not normalized:
+        add('都市言情')
+    return normalized[:max_tags]
+
+
 def infer_tags(title: str, author: str, relpath: str, text: str, categories: list[str]) -> list[str]:
     strong_haystack = ' '.join([title, relpath]).lower()
     soft_haystack = ' '.join([title, relpath, text[:280]]).lower()
@@ -553,14 +798,7 @@ def infer_tags(title: str, author: str, relpath: str, text: str, categories: lis
         tags.append('宫廷权谋')
     if '江湖武侠' in categories:
         tags.append('江湖武侠')
-    unique_tags = []
-    seen = set()
-    for tag in tags:
-        if not tag or tag in seen:
-            continue
-        seen.add(tag)
-        unique_tags.append(tag)
-    return unique_tags[:10]
+    return normalize_reader_tags(tags, categories, max_tags=10)
 
 
 def estimate_score(text: str, intro: str, categories: list[str], tags: list[str], chapter_count: int) -> float:
@@ -703,7 +941,7 @@ def ensure_reader_schema(conn: sqlite3.Connection) -> None:
         '''
     )
     defaults = {
-        'reader_password_hash': sha256_text(DEFAULT_READER_PASSWORD),
+        'reader_password_hash': hash_password(DEFAULT_READER_PASSWORD),
         'reader_ai_url': DEFAULT_READER_AI_URL,
         'reader_ai_model': DEFAULT_READER_AI_MODEL,
         'reader_ai_token': DEFAULT_READER_AI_TOKEN,
@@ -723,7 +961,7 @@ def get_reader_settings(conn: sqlite3.Connection) -> dict[str, str]:
     ).fetchall()
     values = {row['key']: row['value'] for row in rows}
     return {
-        'reader_password_hash': values.get('reader_password_hash', sha256_text(DEFAULT_READER_PASSWORD)),
+        'reader_password_hash': values.get('reader_password_hash', hash_password(DEFAULT_READER_PASSWORD)),
         'reader_ai_url': values.get('reader_ai_url', DEFAULT_READER_AI_URL),
         'reader_ai_model': values.get('reader_ai_model', DEFAULT_READER_AI_MODEL),
         'reader_ai_token': values.get('reader_ai_token', DEFAULT_READER_AI_TOKEN),
@@ -862,8 +1100,8 @@ def compute_relation_score(anchor: dict[str, object] | None, work: dict[str, obj
 
 
 def row_to_work_dict(row: sqlite3.Row) -> dict[str, object]:
-    tags = safe_json_loads(row['tags_json'], [])
     categories = safe_json_loads(row['categories_json'], [])
+    tags = normalize_reader_tags(safe_json_loads(row['tags_json'], []), categories, max_tags=10)
     ai_metrics = safe_json_loads(row['ai_metrics_json'], {})
     base_score = row['ai_score'] if row['ai_score'] is not None else row['heuristic_score']
     total_opens = row['total_opens'] if 'total_opens' in row.keys() else 0

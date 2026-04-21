@@ -1,4 +1,3 @@
-import hashlib
 import json
 import secrets
 import sqlite3
@@ -17,10 +16,13 @@ from reader_core import (
     build_content_payload,
     ensure_reader_schema,
     get_reader_settings,
+    hash_password,
+    normalize_reader_tags,
     rank_works,
     row_to_work_dict,
     safe_json_loads,
     sync_reader_index,
+    verify_password,
 )
 
 STATIC_DIR = BASE_DIR / 'static'
@@ -45,10 +47,6 @@ READER_TOKEN_LOCK = Lock()
 
 def now_iso():
     return datetime.now(UTC).isoformat()
-
-
-def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
 
 def db():
@@ -276,11 +274,12 @@ def build_reader_catalog(conn, user_id, query='', selected_tags=None, sort='reco
 
 
 def get_reader_facets(conn):
-    rows = conn.execute('SELECT author, tags_json FROM reader_works').fetchall()
+    rows = conn.execute('SELECT author, tags_json, categories_json FROM reader_works').fetchall()
     authors = {row['author'] for row in rows}
     counter = Counter()
     for row in rows:
-        for tag in safe_json_loads(row['tags_json'], []):
+        categories = safe_json_loads(row['categories_json'], [])
+        for tag in normalize_reader_tags(safe_json_loads(row['tags_json'], []), categories, max_tags=10):
             counter[tag] += 1
     tags = [{'name': name, 'count': count} for name, count in counter.most_common(30)]
     return {
@@ -636,7 +635,7 @@ class Handler(SimpleHTTPRequestHandler):
             conn.close()
             if not row:
                 return self._json({'error': 'user not found'}, 404)
-            ok = (not row['password_hash']) or (hash_password(password) == row['password_hash'])
+            ok = (not row['password_hash']) or verify_password(password, row['password_hash'])
             return self._json({'ok': bool(ok)})
 
         if parsed.path == '/api/users/update':
@@ -668,7 +667,7 @@ class Handler(SimpleHTTPRequestHandler):
             if limited:
                 return self._json({'error': f'閱讀入口驗證過於頻繁，請 {retry} 秒後再試'}, 429)
             settings = current_reader_settings()
-            if hash_password(password) != settings['reader_password_hash']:
+            if not verify_password(password, settings['reader_password_hash']):
                 return self._json({'ok': False, 'error': '閱讀系統密碼不正確'}, 401)
             return self._json({'ok': True, 'token': issue_reader_token(), 'ttl_sec': READER_SESSION_TTL_SEC})
 

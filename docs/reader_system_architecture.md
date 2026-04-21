@@ -21,6 +21,12 @@ reader_ai.py
 reader_ai_batch.py
   批量 AI 分析腳本：選取待處理作品、調用 reader_ai、落庫、保存 JSON/JSONL 紀錄。
 
+reader_synopsis_backfill.py
+  原文簡介回填腳本：不調模型，掃描已完成作品，將可用的原文簡介清洗後覆蓋 summary / intro。
+
+reader_tag_normalize.py
+  標籤收斂腳本：把舊資料與 AI 自由輸出的 tag 正規化到固定詞表。
+
 launch_reader_ai_batch.sh
   macOS 後台啟動器：用 screen + caffeinate 長時間跑批處理，避免電腦休眠。
 
@@ -39,8 +45,8 @@ static/settings.html
 
 - `relpath`：相對於倉庫根目錄的作品文件路徑。
 - `title` / `author`：作品展示與搜索。
-- `summary` / `intro`：AI 生成的無劇透簡介與卡片描述。
-- `tags_json` / `categories_json` / `primary_category`：推薦與篩選依據。
+- `summary` / `intro`：`summary` 是詳情頁長簡介，`intro` 是列表與關聯推薦卡片短文案。
+- `tags_json` / `categories_json` / `primary_category`：推薦與篩選依據。`tags_json` 使用固定詞表 `reader-v1`，避免自由 tag 膨脹。
 - `ai_score`：總評分。
 - `ai_metrics_json`：細分評分與批處理元資料，例如 `analysis_quality`、`analysis_preset`、`analysis_source_char_count`。
 - `ai_status`：`pending`、`running`、`done`、`failed`。
@@ -58,30 +64,62 @@ static/settings.html
 批處理入口：
 
 ```bash
-./launch_reader_ai_batch.sh --session reader_ai_focused_low_20260421 \
-  --run-dir data/reader_ai_runs/focused_low_20260421_final2 -- \
+./launch_reader_ai_batch.sh --session reader_ai_synopsis_long_20260422 \
+  --run-dir data/reader_ai_runs/synopsis_weighted_longsummary_20260422 -- \
   --mode auto \
   --whole-char-limit 12000 \
-  --spread-chunk-count 3 \
-  --spread-chunk-char-limit 2800 \
-  --timeout 90 \
+  --spread-chunk-count 4 \
+  --spread-chunk-char-limit 1200 \
+  --sample-profile weighted \
+  --timeout 120 \
   --retry-count 1 \
   --quality-tier low \
-  --quality-preset focused-no-spoiler-3x2800
+  --quality-preset synopsis-weighted-longsummary-4x1200
 ```
 
 目前快跑策略：
 
 - 短文小於 `12000` 字時整本輸入。
-- 長文只取 `3` 個窗口，每段約 `2800` 字。
-- 取樣位置為 `2%`、`52%`、`82%`，避開真正結尾。
+- 長文使用 `weighted` 取樣：開頭與高潮前段少量取樣，中段與核心衝突給更多字數。
+- `4x1200` 的總輸入約 `4800` 字，典型窗口為 `2%`、`42%`、`62%`、`82%`。
+- 也保留 `segmented` 取樣：按章節長度等距分段取固定窗口，適合之後補高質量資料。
 - 不取 `92%` 之後，降低結局、番外、作者後記干擾。
-- 生成後寫入 `analysis_quality=low`，之後可專門重跑低質量結果。
+- 若原文開頭已有 `內容簡介`、`作品簡介`、`文案` 等簡介欄，Python 會先清洗並直接寫入較長的 `summary`，再裁出較短的 `intro`；模型只輸出分類、標籤、評分與推薦理由。
+- 若沒有原文簡介，模型才生成無劇透 `summary` / `intro`。`summary` 面向詳情頁，目標約 `120-220` 字；`intro` 面向列表卡片，目標約 `55-100` 字。
+- prompt 會提供固定 `allowed_tags`，模型只能從白名單選 tag；落庫前還會做一次 Python 歸一化。
+- 生成後寫入 `analysis_quality=low`、`analysis_sample_profile=weighted`、`analysis_summary_source`、`analysis_tags_vocabulary`，之後可專門重跑低質量結果。
+
+固定 tag：
+
+- 詞表版本為 `reader-v1`，目前約 68 個 canonical tag。
+- 核心分類必定保留：`虐文`、`骨科文`、`黄文`、`甜宠`、`豪门总裁`、`青梅竹马`、`先婚后爱`、`强制爱` 等。
+- 近義詞會收斂，例如 `虐恋情深 -> 虐文`、`都市情感 -> 都市言情`、`强取豪夺 -> 强制爱`、`暧昧拉扯 -> 双向拉扯`。
+
+標籤回填：
+
+```bash
+python3 reader_tag_normalize.py --status all --dry-run
+python3 reader_tag_normalize.py --status all
+```
+
+- `dry-run` 會報告正規化前後 distinct tag 數量。
+- 實際執行時只處理非 `running` 行，避免與批處理同時寫同一列。
+
+原文簡介回填：
+
+```bash
+python3 reader_synopsis_backfill.py --status done --dry-run
+python3 reader_synopsis_backfill.py --status done
+```
+
+- `dry-run` 只統計有/沒有原文簡介與可替換數量，並寫入 JSON 報告。
+- 實際執行時只處理非 `running` 行，會更新 `summary`、`intro` 與 `ai_metrics_json`。
+- 回填後 `analysis_summary_source=source_synopsis`，後續可用這個欄位區分原文簡介與 AI 生成簡介。
 
 無劇透策略：
 
 - prompt 明確禁止暴露結局、真相、最終選擇、身份揭曉、死亡、最終配對。
-- `reader_ai.py` 會對輸出做分句清洗，刪除含 `最後`、`最終`、`真相`、`原來`、`早已` 等劇透信號的分句。
+- `reader_ai.py` 會對輸出做分句清洗，刪除含 `最後`、`最終`、`真相`、`原來`、`早已`、`懷孕`、`車禍`、`失憶`、`綁架` 等劇透信號的分句。
 - 輸出會安全截句，避免卡片簡介停在半句。
 
 重跑低質量結果：
