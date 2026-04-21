@@ -6,6 +6,7 @@ import json
 import os
 import re
 import sqlite3
+import hmac
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -334,6 +335,17 @@ def utc_now_iso() -> str:
 
 def sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode('utf-8')).hexdigest()
+
+
+def hash_password(password: str) -> str:
+    digest = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), b'web_app_hub_password', 200_000)
+    return f'pbkdf2_sha256${digest.hex()}'
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    if password_hash.startswith('pbkdf2_sha256$'):
+        return hmac.compare_digest(hash_password(password), password_hash)
+    return hmac.compare_digest(sha256_text(password), password_hash)
 
 
 def safe_json_loads(raw: str | None, default):
@@ -917,7 +929,7 @@ def ensure_reader_schema(conn: sqlite3.Connection) -> None:
         '''
     )
     defaults = {
-        'reader_password_hash': sha256_text(DEFAULT_READER_PASSWORD),
+        'reader_password_hash': hash_password(DEFAULT_READER_PASSWORD),
         'reader_ai_url': DEFAULT_READER_AI_URL,
         'reader_ai_model': DEFAULT_READER_AI_MODEL,
         'reader_ai_token': DEFAULT_READER_AI_TOKEN,
@@ -937,7 +949,7 @@ def get_reader_settings(conn: sqlite3.Connection) -> dict[str, str]:
     ).fetchall()
     values = {row['key']: row['value'] for row in rows}
     return {
-        'reader_password_hash': values.get('reader_password_hash', sha256_text(DEFAULT_READER_PASSWORD)),
+        'reader_password_hash': values.get('reader_password_hash', hash_password(DEFAULT_READER_PASSWORD)),
         'reader_ai_url': values.get('reader_ai_url', DEFAULT_READER_AI_URL),
         'reader_ai_model': values.get('reader_ai_model', DEFAULT_READER_AI_MODEL),
         'reader_ai_token': values.get('reader_ai_token', DEFAULT_READER_AI_TOKEN),
