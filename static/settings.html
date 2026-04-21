@@ -3,66 +3,136 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>帳戶設定</title>
+  <title>帳戶與閱讀設定</title>
   <style>
-    body { margin:0; font-family:Inter,system-ui,sans-serif; background:#0f1221; color:#eef2ff; }
-    .wrap { max-width:760px; margin:0 auto; padding:24px; }
-    .card { background:#181c31; border:1px solid #2d355d; border-radius:18px; padding:18px; }
-    input,select,button { background:#202744; color:#eef2ff; border:1px solid #36406c; border-radius:12px; padding:10px 12px; }
+    :root {
+      --bg:#0f1221;
+      --card:#181c31;
+      --card-2:#202744;
+      --text:#eef2ff;
+      --muted:#a6b0d8;
+      --accent:#7c9cff;
+      --accent-2:#f5b971;
+      --line:#2d355d;
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:"Avenir Next","PingFang TC","Noto Sans TC",sans-serif; background:linear-gradient(180deg,#0b0e1a 0%,#13182b 100%); color:var(--text); }
+    .wrap { max-width:980px; margin:0 auto; padding:24px; }
+    .grid { display:grid; gap:16px; grid-template-columns:1fr 1fr; }
+    .card { background:rgba(24,28,49,.92); border:1px solid var(--line); border-radius:18px; padding:18px; }
+    input,select,button { width:100%; background:var(--card-2); color:var(--text); border:1px solid #36406c; border-radius:12px; padding:10px 12px; }
     button { cursor:pointer; }
-    .primary { background:#7c9cff; border-color:transparent; color:#fff; }
-    .subtle { color:#a6b0d8; }
+    .primary { background:var(--accent); border-color:transparent; color:#fff; }
+    .reader { background:var(--accent-2); border-color:transparent; color:#2d1d17; font-weight:700; }
+    .subtle { color:var(--muted); }
+    .stack { display:grid; gap:10px; }
+    .line { min-height:22px; color:var(--muted); }
+    a { color:#9cb8ff; text-decoration:none; }
+    @media (max-width: 860px) { .grid { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <p><a href="/" style="color:#9cb8ff;text-decoration:none">← 返回首頁</a></p>
-    <div class="card">
-      <h1>帳戶設定</h1>
-      <p class="subtle">可修改生日與密碼。密碼留空代表取消密碼。</p>
-      <div style="display:grid; gap:10px; max-width:420px;">
-        <select id="userSelect"></select>
-        <input id="birthday" type="date" />
-        <input id="password" type="password" placeholder="新密碼，可留空" />
-        <div><button class="primary" id="saveBtn">保存設定</button></div>
-      </div>
-      <p class="subtle" id="line"></p>
+    <p><a href="/">← 返回首頁</a></p>
+    <div class="grid">
+      <section class="card">
+        <h1>帳戶設定</h1>
+        <p class="subtle">修改普通使用者的生日與密碼。密碼留空代表取消密碼。</p>
+        <div class="stack">
+          <select id="userSelect"></select>
+          <input id="birthday" type="date" />
+          <input id="password" type="password" placeholder="新密碼，可留空" />
+          <button class="primary" id="saveBtn">保存帳戶設定</button>
+          <div class="line" id="userLine"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>閱讀系統設定</h2>
+        <p class="subtle">這一區控制新增的私密閱讀系統，包括獨立入口密碼，以及本地 AI 的 URL / 模型 / Token。</p>
+        <div class="stack">
+          <input id="readerPassword" type="password" placeholder="新的閱讀系統密碼，不填則不改" />
+          <input id="readerAiUrl" placeholder="OpenAI-compatible URL，例如 http://127.0.0.1:8000/v1" />
+          <input id="readerAiModel" placeholder="模型名，例如 Qwen3.6-35B-A3B-4bit" />
+          <input id="readerAiToken" type="password" placeholder="本地 AI API key / Bearer token，可留空清除" />
+          <button class="reader" id="saveReaderBtn">保存閱讀設定</button>
+          <div class="line" id="readerLine"></div>
+        </div>
+      </section>
     </div>
   </div>
   <script>
     let users = [];
-    async function loadUsers(){
+
+    async function loadUsers() {
       const data = await fetch('/api/users').then(r => r.json());
       users = data.users || [];
       const sel = document.getElementById('userSelect');
       sel.innerHTML = '';
-      for (const u of users) {
+      for (const user of users) {
         const opt = document.createElement('option');
-        opt.value = u.id;
-        opt.textContent = u.name + (u.has_password ? ' 🔒' : '');
+        opt.value = user.id;
+        opt.textContent = user.name + (user.has_password ? ' 🔒' : '');
         sel.appendChild(opt);
       }
-      fill();
+      fillUser();
     }
-    function fill(){
+
+    function fillUser() {
       const id = Number(document.getElementById('userSelect').value || 0);
-      const user = users.find(u => u.id === id);
+      const user = users.find(item => item.id === id);
       document.getElementById('birthday').value = user?.birthday || '';
-      document.getElementById('line').textContent = user ? `正在編輯：${user.name}` : '';
+      document.getElementById('userLine').textContent = user ? `正在編輯：${user.name}` : '';
     }
-    async function save(){
+
+    async function saveUser() {
       const user_id = Number(document.getElementById('userSelect').value || 0);
       const birthday = document.getElementById('birthday').value;
       const password = document.getElementById('password').value;
-      const data = await fetch('/api/users/update', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ user_id, birthday, password }) }).then(r => r.json());
+      const data = await fetch('/api/users/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id, birthday, password })
+      }).then(r => r.json());
       if (!data.ok) return alert(data.error || '保存失敗');
-      alert('已保存');
       document.getElementById('password').value = '';
-      loadUsers();
+      document.getElementById('userLine').textContent = '帳戶設定已保存';
+      await loadUsers();
     }
-    document.getElementById('userSelect').onchange = fill;
-    document.getElementById('saveBtn').onclick = save;
+
+    async function loadReaderSettings() {
+      const data = await fetch('/api/reader/settings').then(r => r.json());
+      const settings = data.settings || {};
+      document.getElementById('readerAiUrl').value = settings.ai_url || '';
+      document.getElementById('readerAiModel').value = settings.ai_model || '';
+      document.getElementById('readerLine').textContent = `Token: ${settings.has_ai_token ? '已配置' : '未配置'}，閱讀入口密碼：${settings.has_password ? '已啟用' : '未啟用'}`;
+    }
+
+    async function saveReaderSettings() {
+      const payload = {
+        password: document.getElementById('readerPassword').value,
+        ai_url: document.getElementById('readerAiUrl').value.trim(),
+        ai_model: document.getElementById('readerAiModel').value.trim(),
+        ai_token: document.getElementById('readerAiToken').value.trim(),
+      };
+      const data = await fetch('/api/reader/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).then(r => r.json());
+      if (!data.ok) return alert(data.error || '保存失敗');
+      document.getElementById('readerPassword').value = '';
+      document.getElementById('readerAiToken').value = '';
+      document.getElementById('readerLine').textContent = `閱讀設定已保存。Token: ${data.settings?.has_ai_token ? '已配置' : '未配置'}`;
+      await loadReaderSettings();
+    }
+
+    document.getElementById('userSelect').onchange = fillUser;
+    document.getElementById('saveBtn').onclick = saveUser;
+    document.getElementById('saveReaderBtn').onclick = saveReaderSettings;
+
     loadUsers();
+    loadReaderSettings();
   </script>
 </body>
 </html>

@@ -92,6 +92,13 @@
       }
     }
 
+    function getAppDescription(app){
+      if (app.slug === 'reader') return '私密閱讀入口，支持搜索、標籤推薦、AI 評分與手機滑動閱讀。';
+      if (app.slug === 'schulte') return '按使用者分開保存舒爾特方格成績與趨勢。';
+      if (app.slug === 'mbti') return '保存 MBTI 測試結果並查看歷史紀錄。';
+      return `slug: ${app.slug}`;
+    }
+
     async function loadApps(){
       const data = await fetch('/api/apps').then(r => r.json());
       apps = data.apps || [];
@@ -100,7 +107,7 @@
       for (const app of apps) {
         const div = document.createElement('div');
         div.className = 'app';
-        div.innerHTML = `<div class="pill">${app.kind}</div><h3>${app.name}</h3><p class="subtle">slug: ${app.slug}</p><button data-route="${app.route}">打開</button>`;
+        div.innerHTML = `<div class="pill">${app.kind}</div><h3>${app.name}</h3><p class="subtle">${getAppDescription(app)}</p><button data-route="${app.route}">打開</button>`;
         div.querySelector('button').onclick = () => openApp(app.route);
         root.appendChild(div);
       }
