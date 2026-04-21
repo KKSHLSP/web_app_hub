@@ -15,6 +15,7 @@ data/results/
 data/cache/
 data/reader_ai_records/
 data/reader_ai_runs/
+data/reader_synopsis_reports/
 
 # local book corpus and generated source lists
 writer/

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import re
 import sys
@@ -333,8 +334,8 @@ def build_analysis_payload(
 
 
 def clean_source_synopsis(value: str) -> str:
-    text = normalize_spaces(value)
-    text = re.sub(r'^[：:【\[\]】\s]+', '', text)
+    text = normalize_spaces(html.unescape(value))
+    text = re.sub(r'^[!！\-—─_=·.。:：【\[\]】\s]+', '', text)
     text = re.sub(r'^《[^》]{1,80}》(?:（[^）]{1,40}）)?(?:作者[：:]?[^，。；\s]{1,30})?\s*(?:TXT下载|TXT全集下载)?', ' ', text)
     text = re.sub(r'^[^，。！？；]{1,60}(?:作者[：:]?[^，。！？；\s]{1,30})\s*(?:TXT下载|TXT全集下载)?', ' ', text)
     text = re.sub(r'[【\[]?(?:书名|書名|作者|内容简介|內容簡介|作品简介|作品簡介|书籍简介|簡介|简介|文案)[】\]]?[：:]?', ' ', text)
@@ -362,9 +363,15 @@ def strip_front_matter_lines(text: str) -> list[str]:
         line = normalize_spaces(raw_line)
         if not line:
             continue
+        if re.fullmatch(r'[!！\-—─_=·.。:：\s]+', line):
+            continue
         if re.fullmatch(r'[《<【\\[]?.{1,60}[》>】\\]]?(TXT全集)?', line) and ('作者' not in line):
             if len(line) <= 40 and any(mark in line for mark in ('《', '<', 'TXT全集')):
                 continue
+        if len(line) <= 24 and not re.search(r'[，。！？；,;?!…]', line):
+            continue
+        if line.endswith(' 返回'):
+            continue
         if re.match(r'^(作者|整理|录入|校对|书名|出版社)[：:]', line):
             continue
         if '更多好书' in line or 'www.' in line.lower() or 'http' in line.lower():

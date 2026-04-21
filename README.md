@@ -138,6 +138,15 @@ python3 reader_ai_batch.py \
   --quality-preset high-segmented-5x4500
 ```
 
+已跑過的資料若後來改進了原文簡介清洗，可以不用重新調模型，直接用 backfill 腳本掃描原文並替換 `summary` / `intro`：
+
+```bash
+python3 reader_synopsis_backfill.py --status done --dry-run
+python3 reader_synopsis_backfill.py --status done
+```
+
+這個腳本只處理非 `running` 行，會把可提取的原文簡介標記為 `analysis_summary_source=source_synopsis`，並把報告寫到 `data/reader_synopsis_reports/`。
+
 ## 資料邊界
 
 GitHub 保存：
@@ -147,6 +156,7 @@ server.py
 reader_core.py
 reader_ai.py
 reader_ai_batch.py
+reader_synopsis_backfill.py
 launch_reader_ai_batch.sh
 static/
 docs/
@@ -159,6 +169,7 @@ README.md
 data/hub.db
 data/reader_ai_runs/
 data/reader_ai_records/
+data/reader_synopsis_reports/
 writer/
 .env
 *.log

@@ -21,6 +21,9 @@ reader_ai.py
 reader_ai_batch.py
   批量 AI 分析腳本：選取待處理作品、調用 reader_ai、落庫、保存 JSON/JSONL 紀錄。
 
+reader_synopsis_backfill.py
+  原文簡介回填腳本：不調模型，掃描已完成作品，將可用的原文簡介清洗後覆蓋 summary / intro。
+
 launch_reader_ai_batch.sh
   macOS 後台啟動器：用 screen + caffeinate 長時間跑批處理，避免電腦休眠。
 
@@ -81,6 +84,17 @@ static/settings.html
 - 若原文開頭已有 `內容簡介`、`作品簡介`、`文案` 等簡介欄，Python 會先清洗並直接寫入較長的 `summary`，再裁出較短的 `intro`；模型只輸出分類、標籤、評分與推薦理由。
 - 若沒有原文簡介，模型才生成無劇透 `summary` / `intro`。`summary` 面向詳情頁，目標約 `120-220` 字；`intro` 面向列表卡片，目標約 `55-100` 字。
 - 生成後寫入 `analysis_quality=low`、`analysis_sample_profile=weighted`、`analysis_summary_source`，之後可專門重跑低質量結果。
+
+原文簡介回填：
+
+```bash
+python3 reader_synopsis_backfill.py --status done --dry-run
+python3 reader_synopsis_backfill.py --status done
+```
+
+- `dry-run` 只統計有/沒有原文簡介與可替換數量，並寫入 JSON 報告。
+- 實際執行時只處理非 `running` 行，會更新 `summary`、`intro` 與 `ai_metrics_json`。
+- 回填後 `analysis_summary_source=source_synopsis`，後續可用這個欄位區分原文簡介與 AI 生成簡介。
 
 無劇透策略：
 
