@@ -546,7 +546,7 @@
             <span class="score-pill ${work.ai_score == null ? 'muted-score' : ''}">${escapeHtml(scoreLabel(work))}</span>
           </div>
           <h3>${escapeHtml(work.title)}</h3>
-          <p class="subtle" style="margin:0;">${escapeHtml(work.summary || work.excerpt || '暫無簡介')}</p>
+          <p class="subtle" style="margin:0;">${escapeHtml(work.intro || work.summary || work.excerpt || '暫無簡介')}</p>
           <div class="meta-line" style="margin-top:10px;">
             <span>契合 ${Number(work.tag_fit_score || 0).toFixed(0)}</span>
             <span>關聯 ${Number(work.relation_score || 0).toFixed(0)}</span>
@@ -565,7 +565,7 @@
       document.getElementById('detailTitle').textContent = work.title;
       document.getElementById('detailAuthor').textContent = `${work.author} · ${work.primary_category || '都市言情'}`;
       document.getElementById('detailScore').textContent = scoreLabel(work);
-      document.getElementById('detailSummary').textContent = work.intro || work.summary || work.excerpt || '暫無簡介';
+      document.getElementById('detailSummary').textContent = work.summary || work.intro || work.excerpt || '暫無簡介';
       document.getElementById('detailMeta').textContent = `${work.char_count || 0} 字 · ${work.chapter_count || 0} 章節`;
       document.getElementById('progressLabel').textContent = `閱讀進度 ${Number(work.progress || 0).toFixed(0)}%`;
       document.getElementById('progressBar').style.width = `${Math.max(0, Math.min(100, Number(work.progress || 0)))}%`;
@@ -594,7 +594,7 @@
         card.innerHTML = `
           <strong>${escapeHtml(item.title)}</strong>
           <p class="subtle" style="margin:8px 0;">${escapeHtml(item.author)} · ${escapeHtml(item.primary_category || '')}</p>
-          <p class="subtle" style="margin:0;">${escapeHtml(item.summary || item.excerpt || '')}</p>
+          <p class="subtle" style="margin:0;">${escapeHtml(item.intro || item.summary || item.excerpt || '')}</p>
         `;
         card.onclick = () => openWork(item.id, true);
         relatedRoot.appendChild(card);

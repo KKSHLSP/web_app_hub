@@ -43,6 +43,9 @@ ALLOWED_PRIMARY_CATEGORIES = [
 DEFAULT_WHOLE_CHAR_LIMIT = 30_000
 DEFAULT_SPREAD_CHUNK_COUNT = 5
 DEFAULT_SPREAD_CHUNK_CHAR_LIMIT = 4_500
+SUMMARY_MAX_CHARS = 260
+INTRO_MAX_CHARS = 120
+SOURCE_SYNOPSIS_MAX_CHARS = 280
 NO_SPOILER_TAIL_GUARD_RATIO = 0.92
 NO_SPOILER_REPLACEMENTS = {
     '从互怼到心动': '在互怼与心动边缘拉扯',
@@ -81,6 +84,8 @@ NO_SPOILER_CLAUSE_WORDS = (
     '車禍',
     '失忆',
     '失憶',
+    '失去记忆',
+    '失去記憶',
     '绑架',
     '綁架',
     '自杀',
@@ -335,11 +340,11 @@ def clean_source_synopsis(value: str) -> str:
     text = re.sub(r'[【\[]?(?:书名|書名|作者|内容简介|內容簡介|作品简介|作品簡介|书籍简介|簡介|简介|文案)[】\]]?[：:]?', ' ', text)
     text = re.sub(r'[【\[]?[^】\]\n]{0,40}(?:内容简介|內容簡介|作品简介|作品簡介|书籍简介|簡介|简介|文案)[】\]]?', ' ', text)
     text = re.sub(r'(更多好书|TXT全集|完结TXT|www\.|http|本图书由).*', '', text, flags=re.IGNORECASE)
-    text = sanitize_no_spoiler_text(text, 180)
+    text = sanitize_no_spoiler_text(text, SOURCE_SYNOPSIS_MAX_CHARS)
     if len(text) < 45:
         return ''
-    if len(text) > 180:
-        text = sanitize_no_spoiler_text(text, 180)
+    if len(text) > SOURCE_SYNOPSIS_MAX_CHARS:
+        text = sanitize_no_spoiler_text(text, SOURCE_SYNOPSIS_MAX_CHARS)
     noisy_patterns = (
         r'^作者有话',
         r'^(序|自序|前言|后记|後記|作者序)\b',
@@ -378,7 +383,7 @@ def extract_source_synopsis(text: str) -> dict[str, object]:
     if label_match:
         rest = head[label_match.end():]
         stop = re.search(stop_pattern, rest)
-        block = rest[: stop.start()] if stop else rest[:1200]
+        block = rest[: stop.start()] if stop else rest[:1800]
         cleaned = clean_source_synopsis(' '.join(strip_front_matter_lines(block)))
         if cleaned:
             return {'summary': cleaned, 'source': 'explicit_label'}
@@ -448,8 +453,8 @@ def build_prompt(
     }
     if not source_synopsis:
         user['required_schema'] = {
-            'summary': '40-120字的无剧透简介，只写设定、人物关系、核心冲突与氛围',
-            'intro': '40-90字的无剧透书架卡片介绍，不能揭露结局或重大反转',
+            'summary': '120-220字的无剧透详情页简介，写清设定、人物关系、核心冲突、情绪风格和适合读者，但不要剧情复盘',
+            'intro': '55-100字的无剧透书架卡片介绍，偏推荐语，不能揭露结局或重大反转',
             **user['required_schema'],
         }
     return [
@@ -556,8 +561,9 @@ def normalize_result(
     chemistry = clamp_score(scores.get('chemistry'), overall)
     spice = clamp_score(scores.get('spice'), overall)
     readability = clamp_score(scores.get('readability'), overall)
-    summary = sanitize_no_spoiler_text(preset_summary or str(raw.get('summary') or ''), 140)
-    intro = sanitize_no_spoiler_text(preset_summary or str(raw.get('intro') or ''), 100)
+    summary = sanitize_no_spoiler_text(preset_summary or str(raw.get('summary') or ''), SUMMARY_MAX_CHARS)
+    intro_source = str(raw.get('intro') or '') or str(raw.get('summary') or '') or preset_summary
+    intro = sanitize_no_spoiler_text(intro_source, INTRO_MAX_CHARS)
     if not summary:
         summary = fallback_payload(title, author, relpath, categories, tags)['summary']
     if not intro:
@@ -645,7 +651,7 @@ def score_work(
         source_synopsis,
     )
     start = time.time()
-    raw_result, raw_response = call_model(url, resolved_model, token, messages, timeout, 430 if source_synopsis else 620)
+    raw_result, raw_response = call_model(url, resolved_model, token, messages, timeout, 430 if source_synopsis else 780)
     elapsed = round(time.time() - start, 2)
     result = normalize_result(raw_result, title, author, relpath, categories, tags, source_synopsis)
     return {
